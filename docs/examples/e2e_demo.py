@@ -167,19 +167,16 @@ async def main() -> None:
     # =========================================================================
     # 5. Protocol Bridges / 协议桥接
     # =========================================================================
-    print("\n[Step] Step 5: Protocol bridges — MCP, A2A & ACP / 协议桥接\n")
+    print("\n[Step] Step 5: Protocol bridges — MCP & A2A / 协议桥接\n")
 
     from gaiaagent.bridges.base import MCPBridge, BridgeRegistry
     from gaiaagent.bridges.a2a import A2ABridge
-    from gaiaagent.bridges.acp import ACPBridge
 
     bridge_registry = BridgeRegistry()
     mcp_bridge = MCPBridge()
     a2a_bridge = A2ABridge()
-    acp_bridge = ACPBridge()
     bridge_registry.register(mcp_bridge)
     bridge_registry.register(a2a_bridge)
-    bridge_registry.register(acp_bridge)
 
     # MCP → AURC / MCP 转 AURC
     mcp_tool_call = {
@@ -216,29 +213,6 @@ async def main() -> None:
     print(f"     A2A method:  tasks/send")
     print(f"     AURC type:   {aurc_from_a2a.type.value}")
     print(f"     Bridge chain: {aurc_from_a2a.protocol_context.bridge_chain}")
-
-    # ACP → AURC / ACP 转 AURC
-    acp_invoke = {
-        "method": "invoke",
-        "params": {
-            "agent_id": "acp:research-agent",
-            "task": "Analyze 2026 AI agent interoperability trends",
-            "input": {"depth": "deep", "sources": ["arxiv", "web"]},
-            "session_id": "sess-acp-001",
-        },
-        "id": "acp-req-1",
-    }
-    aurc_from_acp = await acp_bridge.translate_to_aurc(acp_invoke)
-    print(f"  [Step] ACP → AURC:")
-    print(f"     ACP method:  invoke")
-    print(f"     AURC type:   {aurc_from_acp.type.value}")
-    print(f"     AURC skill:  {aurc_from_acp.body.skill}")
-    print(f"     Bridge chain: {aurc_from_acp.protocol_context.bridge_chain}")
-
-    # AURC → ACP / AURC 转 ACP
-    acp_from_aurc = await acp_bridge.translate_from_aurc(aurc_from_acp)
-    print(f"  [Step] AURC → ACP:")
-    print(f"     ACP output: {json.dumps(acp_from_aurc, default=str)[:150]}")
 
     print(f"  [STAT] Bridge registry: {bridge_registry.list_protocols()}")
 
@@ -432,7 +406,6 @@ async def main() -> None:
     print("  │  OK Session Manager (conversation tracking)          │")
     print("  │  OK MCP Bridge (tools/call ↔ AURC request)          │")
     print("  │  OK A2A Bridge (tasks/send ↔ AURC delegation)       │")
-    print("  │  OK ACP Bridge (invoke ↔ AURC delegation)           │")
     print("  │  OK API Key + JWT Authentication                     │")
     print("  │  OK CapABAC Authorization Engine                     │")
     print("  │  OK Delegation Chain Validation                      │")

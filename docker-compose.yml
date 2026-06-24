@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  # ── Main AURC server ──────────────────────────────────────────
+  aurc-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aurc-server
+    ports:
+      - "8080:8080"
+    environment:
+      - AURC_LOG_LEVEL=info
+      - AURC_HOST=0.0.0.0
+      - AURC_PORT=8080
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - aurc-data:/app/data
+    networks:
+      - aurc-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Demo runner (main.py) ─────────────────────────────────────
+  aurc-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aurc-demo
+    command: ["python", "/app/main.py"]
+    environment:
+      - AURC_LOG_LEVEL=debug
+      - AURC_SERVER_URL=http://aurc-server:8080
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./main.py:/app/main.py:ro
+    depends_on:
+      aurc-server:
+        condition: service_healthy
+    networks:
+      - aurc-net
+    restart: "no"
+
+networks:
+  aurc-net:
+    driver: bridge
+
+volumes:
+  aurc-data:
+    driver: local

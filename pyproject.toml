@@ -1,7 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "gaiaagent"
 version = "0.1.0"
-description = "Add your description here"
+description = "AURC Protocol — Agent Unified Runtime & Communication. A bridging protocol for AI agent interoperability with runtime lifecycle management."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+license = "AGPL-3.0-or-later"
+authors = [{ name = "GaiaAgent Team" }]
+keywords = ["ai", "agent", "protocol", "mcp", "a2a", "bridge", "harness", "interoperability"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+http = [
+    "httpx>=0.24",
+    "uvicorn>=0.20",
+]
+claude = [
+    "anthropic>=0.40",
+]
+all = [
+    "gaiaagent[dev,http,claude]",
+]
+
+[project.scripts]
+aurc = "gaiaagent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/gaiaagent/gaiaagent"
+Documentation = "https://gaiaagent.dev/docs"
+Repository = "https://github.com/gaiaagent/gaiaagent"
+Issues = "https://github.com/gaiaagent/gaiaagent/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gaiaagent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.coverage.run]
+source = ["src/gaiaagent"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
