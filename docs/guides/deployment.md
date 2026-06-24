@@ -467,6 +467,42 @@ running_agents = harness.list_agents(state=AgentState.RUNNING)
 
 ---
 
+### Prometheus Scraping / Prometheus 抓取
+
+The dashboard exposes a `/metrics` endpoint in Prometheus text exposition format, scrape-ready with no sidecar:
+
+仪表盘在 `/metrics` 端点暴露 Prometheus 文本展示格式指标，可直接抓取，无需 sidecar：
+
+```python
+from gaiaagent.observability import (
+    HealthDashboard, DashboardAPI, PrometheusMetricsExporter,
+)
+
+dashboard = HealthDashboard(harness, audit=audit, router=router)
+api = DashboardAPI(dashboard)
+# Mount `api.handle_request` in your ASGI server; GET /metrics returns
+# 将 api.handle_request 挂载到 ASGI 服务器；GET /metrics 返回
+# Prometheus text (content-type: text/plain; version=0.0.4).
+
+# Or render directly (e.g. for a sidecar or ad-hoc check) / 或直接渲染
+print(PrometheusMetricsExporter(dashboard).render())
+```
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: "aurc"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["aurc-harness:8080"]
+```
+
+Metric families include `aurc_messages_total{route=...}` (direct / bridged / broadcast / dead_lettered / dropped), `aurc_agent_state{state=...}`, `aurc_health{status=...}`, and `aurc_audit_events_total{action=...}`.
+
+指标族包括 `aurc_messages_total{route=...}`（direct / bridged / broadcast / dead_lettered / dropped）、`aurc_agent_state{state=...}`、`aurc_health{status=...}` 与 `aurc_audit_events_total{action=...}`。
+
+---
+
 ## Monitoring and Observability / 监控和可观测性
 
 ### Router Statistics / 路由器统计

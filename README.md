@@ -483,8 +483,10 @@ gaiaagent/
 ├── integrations/           # LLM Integrations
 │   └── claude.py           #   Claude LLM + Agentic Loop + Tool Use
 │
-├── observability/          # Monitoring
-│   └── dashboard.py        #   Health dashboard (HTML + JSON API)
+├── observability/          # Monitoring & tracing
+│   ├── dashboard.py        #   Health dashboard (HTML + JSON + ASGI API)
+│   ├── metrics.py          #   Prometheus /metrics exporter
+│   └── tracing.py          #   Bridge-chain trace recorder (correlation by ID)
 │
 └── cli.py                  # `aurc` CLI tool
 ```
@@ -537,20 +539,19 @@ docker run -p 8080:8080 gaiaagent
 
 ## Roadmap
 
-> GaiaAgent is **v0.1.0 alpha**: the spec is frozen and the reference implementation ships the layers below, but APIs are still settling and production hardening is ongoing. We move in the open — every item below links to progress in [Discussions](https://github.com/gaiaagent/gaiaagent/discussions).
+> GaiaAgent is **v0.1.0 alpha**: the spec is frozen and the reference implementation ships the layers below, but APIs are still settling and production hardening is ongoing. The full, living plan lives in **[ROADMAP.md](ROADMAP.md)** — north star, six workstreams, version milestones, acceptance criteria, and explicit non-goals.
 
-| Phase | Milestone | Status |
-|:---|:---|:---:|
-| **Phase 1** | Protocol spec + core types + Runtime Harness + Registry + SDK | ✅ Shipped (alpha) |
-| **Phase 2** | Message Bus + routing + session management + codecs + WebSocket transport | ✅ Shipped (alpha) |
-| **Phase 3** | MCP / A2A / ACP bridges + HTTP transport + end-to-end demos | ✅ Shipped (alpha) |
-| **Phase 4** | Security (CapABAC + auth + delegation + audit) + Health Dashboard | ✅ Shipped (alpha) |
-| **Phase 5** | Claude integration + 5 workflow patterns + CLI + comprehensive docs | ✅ Shipped (alpha) |
-| **Phase 6** | Docker + CI/CD + community infrastructure | 🚧 In progress |
-| **Phase 7** | gRPC transport + distributed registry + OpenTelemetry integration | 🔜 Planned |
-| **Phase 8** | Language SDKs (TypeScript, Go, Rust) + ecosystem plugins | 🔜 Planned |
+| Version | Theme | Status |
+|:---:|:---|:---:|
+| **v0.1** | Single-process reference impl (3 bridges · 9-state lifecycle · CapABAC · 5 patterns · CLI · Claude) | ✅ Alpha |
+| **v0.2** | Production-ready single-tenant (gRPC · distributed registry · OpenTelemetry · persistent audit) | 🚧 Next |
+| **v0.3** | Multi-tenant & federation | 🔜 |
+| **v0.4** | Polyglot SDKs (TypeScript · Go · Rust) + conformance suite | 🔜 |
+| **v1.0** | Standard-grade: second independent implementation · spec frozen · security audit | 🔜 |
 
-**What "alpha" means here:** the modules exist, are unit-tested, and run end-to-end in `python main.py` — but edge cases, perf, and the second independent implementation (needed to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec.
+**What "alpha" means here:** the modules exist, are unit-tested (254 passing), and run end-to-end in `python main.py` — but edge cases, perf, and the *second independent implementation* (the bar to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec, [ROADMAP.md](ROADMAP.md) for what's next.
+
+> 📌 **Highest-leverage contribution:** build the second independent implementation of AURC — that single act graduates the protocol from "our spec" to "a standard."
 
 ---
 
@@ -558,6 +559,7 @@ docker run -p 8080:8080 gaiaagent
 
 | Document | Description |
 |:---|:---|
+| [ROADMAP.md](ROADMAP.md) | **Living roadmap** — north star, six workstreams, milestones, non-goals |
 | [PROTOCOL.md](PROTOCOL.md) | **Full AURC protocol specification** — the canonical reference |
 | [Architecture Overview](docs/architecture/overview.md) | System map, module dependencies, design decisions |
 | [Security Model](docs/architecture/security-model.md) | Threat model, CapABAC deep-dive, delegation rules |

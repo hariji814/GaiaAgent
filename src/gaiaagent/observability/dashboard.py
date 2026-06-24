@@ -16,9 +16,8 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote
 
-from ..core.types import AgentState, HealthStatus
 from ..harness.lifecycle import AgentInstance, RuntimeHarness
-from ..security.audit import AuditLog, AuditSeverity
+from ..security.audit import AuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -499,6 +498,7 @@ class DashboardAPI:
         GET /api/agents/{id}   — JSON single agent / JSON 单个 Agent
         GET /api/audit         — JSON audit summary / JSON 审计摘要
         GET /api/metrics       — JSON system metrics / JSON 系统指标
+        GET /metrics           — Prometheus text exposition / Prometheus 文本指标
         GET /api/stats         — JSON combined statistics / JSON 组合统计
 
     Usage / 用法:
@@ -566,6 +566,15 @@ class DashboardAPI:
             data = self._dashboard.get_metrics()
             await self._send_json(send, 200, data)
 
+        elif path in ("/metrics", "/metrics/"):
+            # Prometheus text exposition format / Prometheus 文本展示格式
+            from .metrics import PROMETHEUS_CONTENT_TYPE, PrometheusMetricsExporter
+
+            text = PrometheusMetricsExporter(self._dashboard).render()
+            await self._send_text(
+                send, 200, text, content_type=PROMETHEUS_CONTENT_TYPE
+            )
+
         elif path in ("/api/stats", "/api/stats/"):
             # Combined statistics / 组合统计
             data = {
@@ -600,6 +609,33 @@ class DashboardAPI:
             "status": status,
             "headers": [
                 [b"content-type", b"application/json; charset=utf-8"],
+                [b"cache-control", b"no-cache"],
+            ],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": body,
+        })
+
+    @staticmethod
+    async def _send_text(
+        send: Any, status: int, text: str, *, content_type: str = "text/plain; charset=utf-8"
+    ) -> None:
+        """Send a plain-text HTTP response.
+        发送纯文本 HTTP 响应
+
+        Args:
+            send: ASGI send callable / ASGI 发送可调用对象
+            status: HTTP status code / HTTP 状态码
+            text: Response body text / 响应体文本
+            content_type: Content-Type header value / Content-Type 头值
+        """
+        body = text.encode("utf-8")
+        await send({
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                [b"content-type", content_type.encode("utf-8")],
                 [b"cache-control", b"no-cache"],
             ],
         })

@@ -882,6 +882,90 @@ class ClaudeAgent:
 
 ---
 
+## Observability APIs / 可观测性 API
+
+Module: `gaiaagent.observability`
+
+### HealthDashboard
+
+```python
+class HealthDashboard:
+    def __init__(harness: RuntimeHarness, audit: AuditLog | None = None,
+                 router: MessageRouter | None = None)
+    def get_system_health() → dict          # health counts + state dist + router stats
+    def get_agent_health(agent_id) → dict | None
+    def get_all_agents() → list[dict]
+    def get_audit_summary() → dict
+    def get_metrics() → dict                # aggregate resource + router + audit metrics
+    def get_dashboard_html() → str          # self-contained HTML page
+```
+
+### DashboardAPI (ASGI)
+
+```python
+class DashboardAPI:
+    def __init__(dashboard: HealthDashboard)
+    async def handle_request(scope, receive, send) → None
+    # Routes / 路由:
+    #   GET /dashboard        HTML dashboard / HTML 仪表盘
+    #   GET /api/health       JSON system health / JSON 系统健康
+    #   GET /api/agents       JSON agent list / JSON Agent 列表
+    #   GET /api/agents/{id}  JSON single agent / JSON 单个 Agent
+    #   GET /api/audit        JSON audit summary / JSON 审计摘要
+    #   GET /api/metrics      JSON metrics / JSON 指标
+    #   GET /metrics          Prometheus text exposition / Prometheus 文本指标
+    #   GET /api/stats        JSON combined statistics / JSON 组合统计
+```
+
+### PrometheusMetricsExporter
+
+```python
+class PrometheusMetricsExporter:
+    def __init__(dashboard: HealthDashboard, *, namespace="aurc")
+    content_type: @property → str           # "text/plain; version=0.0.4; charset=utf-8"
+    def render() → str                       # Prometheus text exposition (for /metrics)
+```
+
+Emits: `aurc_up`, `aurc_agents_total`, `aurc_active_tasks`, `aurc_tasks_completed_total`,
+`aurc_tasks_failed_total`, `aurc_error_rate`, `aurc_memory_mb`, `aurc_cpu_percent`,
+`aurc_audit_entries_total`, `aurc_messages_total{route=...}`, `aurc_router_errors_total`,
+`aurc_agent_state{state=...}`, `aurc_health{status=...}`, `aurc_audit_events_total{action=...}`.
+
+### BridgeTraceRecorder / TraceSpan
+
+```python
+class TraceSpan:                              # one recorded hop / 一个记录的跳
+    correlation_id: str | None
+    message_id: str
+    source: str; target: str; type: str
+    origin_protocol: str
+    bridge_chain: list[str]
+    hop_count: int
+    timestamp: str
+    def to_log_line() → str                  # single structured log line / 单行结构化日志
+    def to_dict() → dict
+
+class BridgeTraceRecorder:
+    def __init__(max_traces=10_000)
+    def record(message: AURCMessage) → TraceSpan        # record a message hop / 记录消息跳
+    def record_span(span: TraceSpan) → TraceSpan        # record a synthetic span / 记录合成 span
+    def get_trace(correlation_id) → list[TraceSpan]     # all hops for a correlation / 该关联所有跳
+    def all_traces() → dict[str | None, list[TraceSpan]]
+    def render_trace(correlation_id) → str              # multi-line trace log / 多行追踪日志
+    trace_count: @property → int
+    span_count: @property → int
+    def clear() → int
+```
+
+> See `docs/examples/observability_demo.py` for a runnable end-to-end example
+> that exercises all three bridges under a shared `correlation_id` and renders
+> Prometheus metrics + a bridge-chain trace.
+>
+> 参见 `docs/examples/observability_demo.py`：一个可运行的端到端示例，在共享
+> `correlation_id` 下驱动三个桥接，并渲染 Prometheus 指标与桥接链追踪。
+
+---
+
 ## CLI Commands / CLI 命令
 
 Module: `gaiaagent.cli`

@@ -587,15 +587,21 @@ class ResearchAgent:
 
 ---
 
-## 15. Roadmap
+## 15. Roadmap / 路线图
 
-| Phase | Scope | Duration |
-|-------|-------|----------|
-| **1: Foundation** | Protocol spec, core types, Harness, Registry, SDK | 4 weeks |
-| **2: Messaging** | Message Bus, routing, session management | 3 weeks |
-| **3: Bridges** | MCP/A2A/ACP bridges, E2E demos | 4 weeks |
-| **4: Enterprise** | CapABAC, audit, health dashboard | 3 weeks |
-| **5: Ecosystem** | Full docs, example agents, community | Ongoing |
+The normative protocol scope of **AURC v0.1** is everything described in this document (L0–L7, bridges for MCP/A2A/ACP, CapABAC, the 9-state lifecycle). This is the **frozen** reference for implementers.
+
+**AURC v0.1 的协议范围即本文档所述全部内容（L0–L7、MCP/A2A/ACP 桥接、CapABAC、9 态生命周期），为实现者提供冻结的参考。**
+
+The living project roadmap — version milestones (v0.2 → v1.0), the six workstreams (Runtime, Interop, Security, Observability, Ecosystem, Standardization), acceptance criteria, and explicit non-goals — is maintained separately:
+
+项目的持续演进路线图——版本里程碑（v0.2 → v1.0）、六大赛道、验收标准与非目标——单独维护：
+
+➡️ **[ROADMAP.md](ROADMAP.md)**
+
+Protocol-level changes (new message types, lifecycle states, security-model revisions, bridge-interface requirements) are governed by the [AURC-RFC process](CONTRIBUTING.md#protocol-changes-aurc-rfc) and require ≥2 maintainer approvals plus a 2-week public comment period. AURC becomes a recognized standard once a **second independent implementation** passes the conformance suite.
+
+协议级变更受 [AURC-RFC 流程](CONTRIBUTING.md#protocol-changes-aurc-rfc) 治理，需 ≥2 名维护者批准及 2 周公开评议。当**第二个独立实现**通过一致性测试集时，AURC 即成为公认标准。
 
 ---
 
