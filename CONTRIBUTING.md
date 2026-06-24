@@ -1,96 +1,346 @@
-# Contributing to GaiaAgent / 贡献指南
+# Contributing to GaiaAgent
 
-Thank you for your interest in contributing to the AURC Protocol!
-感谢你关注 AURC 协议并考虑贡献！
+> **Thank you for considering contributing to GaiaAgent and the AURC protocol!**
+> 感谢你关注 GaiaAgent 并考虑贡献！
 
-## Code of Conduct / 行为准则
+Whether you're fixing a bug, proposing a feature, writing a protocol bridge, or improving documentation — your contribution makes the AI agent ecosystem more connected and more powerful.
 
-We are committed to providing a welcoming and inclusive environment.
-我们致力于提供友好和包容的环境。
+---
 
-## How to Contribute / 如何贡献
+## Table of Contents
 
-### Reporting Bugs / 报告 Bug
+- [Code of Conduct](#code-of-conduct)
+- [How Can I Contribute?](#how-can-i-contribute)
+- [Development Setup](#development-setup)
+- [Development Workflow](#development-workflow)
+- [Code Standards](#code-standards)
+- [Testing](#testing)
+- [Submitting Pull Requests](#submitting-pull-requests)
+- [Protocol Changes (AURC-RFC)](#protocol-changes-aurc-rfc)
+- [Architecture Decisions](#architecture-decisions)
+- [Community](#community)
 
-1. Check existing issues first / 先检查已有 Issue
-2. Use the bug report template / 使用 Bug 报告模板
-3. Include: Python version, OS, reproduction steps / 包括：Python 版本、操作系统、复现步骤
+---
 
-### Suggesting Features / 建议功能
+## Code of Conduct
 
-1. Open a discussion in GitHub Discussions / 在 GitHub Discussions 开讨论
-2. Describe the use case and motivation / 描述使用场景和动机
-3. Protocol changes require an AURC-RFC / 协议变更需要提交 AURC-RFC
+We are committed to providing a welcoming and inclusive environment for everyone, regardless of experience level, gender identity, sexual orientation, disability, personal appearance, body size, race, ethnicity, age, religion, or nationality.
 
-### Submitting Code / 提交代码
+**Be respectful. Be constructive. Be kind.**
 
-1. Fork the repository / Fork 仓库
-2. Create a feature branch / 创建功能分支
-3. Write tests for your changes / 为你的修改编写测试
-4. Ensure all tests pass: `uv run pytest` / 确保所有测试通过
-5. Run linter: `uv run ruff check src/ tests/` / 运行代码检查
-6. Submit a pull request / 提交 Pull Request
+---
 
-## Development Setup / 开发环境
+## How Can I Contribute?
+
+### 🐛 Report Bugs
+
+Found a bug? [Open a bug report](https://github.com/gaiaagent/gaiaagent/issues/new?template=bug_report.md) and include:
+
+- **Python version** (`python --version`)
+- **OS** (Linux/macOS/Windows + version)
+- **Minimal reproduction** (code snippet or link to repo)
+- **Expected vs. actual behavior**
+- **Full error traceback** (if applicable)
+
+### 💡 Suggest Features
+
+Have an idea? [Open a feature request](https://github.com/gaiaagent/gaiaagent/issues/new?template=feature_request.md) with:
+
+- **Use case** — what problem does this solve?
+- **Proposed API** — how would it look from a developer's perspective?
+- **Alternatives considered** — what else did you think about?
+
+### 🔌 Write a Protocol Bridge
+
+One of the most powerful ways to contribute is writing a bridge for a new protocol. See the [Bridge Developer Guide](docs/architecture/bridge-guide.md) for a step-by-step walkthrough.
+
+Current bridges: MCP, A2A, ACP. We'd love bridges for: gRPC, GraphQL, NATS, Kafka, AMQP, or any protocol you use.
+
+### 📝 Improve Documentation
+
+Documentation is a first-class citizen. Typos, unclear explanations, missing examples — all fair game. Documentation PRs are often merged within 24 hours.
+
+### 🧪 Write Tests
+
+Every module should have tests. If you find an untested code path, adding tests is an excellent contribution.
+
+---
+
+## Development Setup
 
 ```bash
-git clone https://github.com/gaiaagent/gaiaagent
+# 1. Fork the repository on GitHub, then clone your fork
+git clone https://github.com/YOUR-USERNAME/gaiaagent
 cd gaiaagent
-pip install -e ".[dev]"
-```
 
-### Running Tests / 运行测试
+# 2. Create a virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
 
-```bash
-# All tests / 全部测试
+# 3. Install with all development dependencies
+pip install -e ".[all]"
+
+# 4. Verify everything works
 pytest
-
-# Specific module / 特定模块
-pytest tests/test_lifecycle.py
-
-# With coverage / 带覆盖率
-pytest --cov=src/gaiaagent --cov-report=term-missing
+mypy src/
+ruff check src/ tests/
 ```
 
-### Code Style / 代码风格
+---
 
-- **Formatter**: ruff (line-length=100) / ruff 格式化
-- **Type checking**: mypy (strict mode) / mypy 严格模式
-- **Docstrings**: Google style with bilingual comments / Google 风格，双语注释
+## Development Workflow
+
+```
+1. Pick an issue (or create one)
+2. Comment on the issue to let others know you're working on it
+3. Create a feature branch from main
+4. Write your code + tests
+5. Run the full test suite
+6. Submit a Pull Request
+```
+
+### Branch Naming
+
+```
+feature/short-description     # New features
+fix/issue-number-description  # Bug fixes
+bridge/protocol-name          # New protocol bridges
+docs/what-youre-documenting   # Documentation
+refactor/what-youre-refactoring  # Refactoring
+```
+
+### Commit Messages
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+feat(bridges): add gRPC bridge implementation
+fix(lifecycle): prevent invalid PAUSED→COMPLETED transition
+docs(workflows): add nested pattern examples
+test(security): add delegation chain edge cases
+refactor(bus): extract routing logic into strategy pattern
+```
+
+---
+
+## Code Standards
+
+| Standard | Tool | Configuration |
+|:---|:---|:---|
+| **Formatting** | `ruff format` | Line length: 100 |
+| **Linting** | `ruff check` | Rules: E, F, I, N, W, UP |
+| **Type Checking** | `mypy` | Strict mode enabled |
+| **Docstrings** | Google style | Bilingual (EN/ZH) encouraged |
+| **Async** | `async/await` | All I/O must be async |
+| **Models** | Pydantic v2 | For all data structures |
+
+### Quick Commands
 
 ```bash
-# Format / 格式化
+# Format code
 ruff format src/ tests/
 
-# Lint / 检查
+# Check for issues
 ruff check src/ tests/
 
-# Type check / 类型检查
+# Type check
 mypy src/
+
+# Run all checks at once
+make all
 ```
 
-## Protocol Changes / 协议变更
+---
 
-Changes to the AURC protocol specification require an **AURC-RFC** (Request for Comments):
+## Testing
 
-1. Create `docs/rfcs/AURC-RFC-NNN-title.md`
+### Running Tests
+
+```bash
+# All tests
+pytest
+
+# Specific module
+pytest tests/test_lifecycle.py
+
+# With verbose output
+pytest -v --tb=short
+
+# With coverage
+pytest --cov=src/gaiaagent --cov-report=term-missing
+
+# Run only fast tests (skip integration)
+pytest -m "not integration"
+```
+
+### Writing Tests
+
+- **Every new function needs tests** — no exceptions
+- **Test both happy paths and error paths**
+- **Use `pytest-asyncio`** for async tests (configured in `pyproject.toml`)
+- **Use descriptive test names**: `test_delegation_chain_rejects_scope_escalation` not `test_delegation`
+
+```python
+import pytest
+
+@pytest.mark.asyncio
+async def test_bridge_translates_mcp_to_aurc():
+    bridge = MCPBridge()
+    mcp_msg = {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "search"}}
+
+    aurc_msg = await bridge.translate_to_aurc(mcp_msg)
+
+    assert aurc_msg.type == MessageDirection.REQUEST
+    assert aurc_msg.body.skill == "search"
+```
+
+---
+
+## Submitting Pull Requests
+
+### Before You Submit
+
+- [ ] All tests pass (`pytest`)
+- [ ] No lint errors (`ruff check src/ tests/`)
+- [ ] No type errors (`mypy src/`)
+- [ ] New code has tests
+- [ ] New public APIs have docstrings
+- [ ] `CHANGELOG.md` updated (if applicable)
+
+### PR Description Template
+
+```markdown
+## What does this PR do?
+
+Brief description of the change.
+
+## Motivation
+
+Why is this change needed? Link to issue if applicable.
+
+## Changes
+
+- Change 1
+- Change 2
+
+## Testing
+
+- How did you test this?
+- What tests did you add?
+
+## Checklist
+
+- [ ] Tests added/updated
+- [ ] Documentation updated
+- [ ] No breaking changes (or documented in CHANGELOG)
+```
+
+### Review Process
+
+1. **Automated checks** run (CI, lint, type-check)
+2. **At least 1 maintainer** reviews and approves
+3. **Address feedback** — push new commits to the same branch
+4. **Squash and merge** — maintainers will squash your commits on merge
+
+---
+
+## Protocol Changes (AURC-RFC)
+
+Changes to the AURC protocol specification require a formal **RFC (Request for Comments)** process:
+
+### When to Submit an RFC
+
+- Adding a new message type
+- Changing the message format schema
+- Adding a new lifecycle state or transition
+- Modifying the security model
+- Adding a new bridge interface requirement
+
+### RFC Process
+
+```
+1. Create: docs/rfcs/AURC-RFC-NNN-short-title.md
 2. Include: motivation, specification, backward compatibility, migration plan
-3. Open a PR for community review
-4. Requires approval from at least 2 maintainers
+3. Open PR: labeled "rfc" for community review
+4. Discussion: 2-week public comment period
+5. Revision: address feedback
+6. Approval: requires 2+ maintainer approvals
+7. Implementation: reference implementation in GaiaAgent
+8. Standardization: after 2+ independent implementations, becomes part of spec
+```
 
-对 AURC 协议规范的变更需要提交 **AURC-RFC**：
+### RFC Template
 
-1. 创建 `docs/rfcs/AURC-RFC-NNN-title.md`
-2. 包括：动机、规范、向后兼容性、迁移计划
-3. 开启 PR 供社区审查
-4. 需要至少 2 位维护者批准
+```markdown
+# AURC-RFC-NNN: Title
 
-## License / 许可证
+## Status: Draft | Discussion | Accepted | Rejected
 
-By contributing, you agree that your contributions will be licensed under:
-- **Code**: AGPL-3.0
-- **Documentation**: CC BY-SA 4.0
+## Motivation
+What problem does this solve?
 
-贡献即表示你同意你的贡献以以下许可证发布：
-- **代码**: AGPL-3.0
-- **文档**: CC BY-SA 4.0
+## Specification
+Detailed technical specification.
+
+## Backward Compatibility
+How does this affect existing implementations?
+
+## Migration Plan
+How do existing users upgrade?
+
+## Security Considerations
+Any security implications?
+
+## Unresolved Questions
+Open questions for discussion.
+```
+
+---
+
+## Architecture Decisions
+
+When making significant architectural changes, consider these core principles:
+
+| Principle | Meaning |
+|:---|:---|
+| **Bridge First** | Don't invent new communication primitives; unify existing protocols |
+| **Runtime is King** | Agent = Model + Harness; the Harness is a first-class citizen |
+| **Progressive Complexity** | Simple core, enterprise features as optional modules |
+| **Protocol-Agnostic Identity** | One agent, one identity across all protocols |
+| **Security by Default** | Permissions enforceable at the protocol level, not just declarative |
+
+---
+
+## Community
+
+- **GitHub Issues** — bug reports, feature requests
+- **GitHub Discussions** — questions, ideas, community chat
+- **Discord** — real-time conversation with other contributors
+- **RFC Process** — formal protocol evolution
+
+### Becoming a Maintainer
+
+Active contributors who demonstrate deep understanding of the codebase and protocol may be invited to become maintainers. Maintainers can:
+
+- Merge PRs
+- Triage issues
+- Participate in architectural decisions
+- Review RFCs
+
+---
+
+## License
+
+By contributing to GaiaAgent, you agree that your contributions will be licensed under:
+
+- **Code**: [AGPL-3.0](LICENSE)
+- **Documentation**: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- **Protocol Specification**: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+
+---
+
+<p align="center">
+  <strong>Ready to contribute?</strong>
+  <a href="https://github.com/gaiaagent/gaiaagent/issues">Browse open issues →</a>
+</p>

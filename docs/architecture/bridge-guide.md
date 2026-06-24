@@ -1,5 +1,7 @@
 # Bridge Developer Guide / 协议桥接开发指南
 
+> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../PROTOCOL.md) | [API Reference](../api-reference.md)
+>
 > How to write a custom protocol bridge for AURC.
 > 如何为 AURC 编写自定义协议桥接器。
 
@@ -147,3 +149,4 @@ async def test_aurc_to_grpc():
 |--------|------|----------|
 | MCPBridge | `bridges/base.py` | MCP (JSON-RPC 2.0) |
 | A2ABridge | `bridges/a2a.py` | A2A (JSON-RPC 2.0 + SSE) |
+| ACPBridge | `bridges/acp.py` | ACP (HTTP JSON envelope) |

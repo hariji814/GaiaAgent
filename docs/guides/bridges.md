@@ -1,5 +1,7 @@
 # Bridge Integration Guide / 桥接集成指南
 
+> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Bridge Developer Guide](../architecture/bridge-guide.md) | [Protocol Spec](../../PROTOCOL.md)
+>
 > Connect AURC agents to MCP servers, A2A agents, and custom protocols
 > 将 AURC Agent 连接到 MCP 服务器、A2A Agent 和自定义协议
 
@@ -290,70 +292,110 @@ aurc_descriptor = a2a_bridge.map_agent_card(agent_card)
 
 ## ACP Bridge / ACP 桥接器
 
-ACP (Agent Communication Protocol) uses lightweight REST messaging. While AURC does not ship a built-in ACP bridge, the interface is straightforward to implement.
+GaiaAgent ships a built-in **ACPBridge** (`gaiaagent.bridges.acp`) that translates between IBM's ACP (Agent Communication Protocol) and AURC. ACP is a lightweight, HTTP-native protocol that uses a simple JSON envelope (not JSON-RPC) with method-based dispatch.
 
-ACP（Agent 通信协议）使用轻量级 REST 消息。虽然 AURC 没有内置 ACP 桥接器，但该接口很容易实现。
+GaiaAgent 内置 **ACPBridge**（`gaiaagent.bridges.acp`），在 IBM 的 ACP（Agent Communication Protocol）与 AURC 之间翻译。ACP 是一个轻量级、HTTP 原生的协议，使用简单的 JSON 信封（非 JSON-RPC）进行基于方法的分发。
 
-### ACP Bridge Template / ACP 桥接器模板
+### Creating an ACP Bridge / 创建 ACP 桥接器
 
 ```python
-from gaiaagent.bridges.base import ProtocolBridge
-from gaiaagent.core.message import AURCMessage, BridgeContext, MessageBody
+from gaiaagent.bridges.acp import ACPBridge
+from gaiaagent.bridges.base import BridgeRegistry
+
+acp_bridge = ACPBridge()
+registry = BridgeRegistry()
+registry.register(acp_bridge)
+
+print(acp_bridge.source_protocol)  # "acp/1.0"
+```
+
+### Translating ACP → AURC / 翻译 ACP → AURC
+
+ACP `invoke` becomes an AURC `delegation`:
+
+```python
+acp_message = {
+    "method": "invoke",
+    "id": "acp-req-1",
+    "params": {
+        "agent_id": "acp-agent-01",
+        "task": "Summarize the latest AI news",
+        "input": {"topic": "AI agents"},
+        "session_id": "session-acp-001",
+    }
+}
+
+aurc_msg = await acp_bridge.translate_to_aurc(acp_message)
+
+print(aurc_msg.type)              # MessageDirection.DELEGATION
+print(aurc_msg.body.method)       # "invoke"
+print(aurc_msg.body.skill)        # "summarize" (inferred from task)
+print(aurc_msg.body.params["task"])        # "Summarize the latest AI news"
+print(aurc_msg.body.params["session_id"])  # "session-acp-001"
+print(aurc_msg.protocol_context.origin_protocol)  # "acp/1.0"
+```
+
+### Supported ACP Methods / 支持的 ACP 方法
+
+| ACP Method | AURC Type | Description / 描述 |
+|---|---|---|
+| `invoke` | `delegation` | Agent invocation — primary work entry / Agent 调用，主要工作入口 |
+| `cancel` | `notification` | Cancel a running task / 取消运行中的任务 |
+| `get-task` | `request` | Query task status / 查询任务状态 |
+| `list-tasks` | `request` | List tasks with filtering / 列出任务（可过滤） |
+| `set-task` | `notification` | Update task state directly / 直接更新任务状态 |
+
+### Translating AURC → ACP / 翻译 AURC → ACP
+
+```python
+from gaiaagent.core.message import AURCMessage, MessageBody
 from gaiaagent.core.types import MessageDirection
 
-class ACPBridge:
-    """ACP ↔ AURC Bridge. ACP ↔ AURC 桥接器"""
+aurc_delegation = AURCMessage(
+    source="aurc:gaia/orchestrator:v1.0",
+    target="acp:external/summarizer",
+    type=MessageDirection.DELEGATION,
+    body=MessageBody(
+        method="invoke",
+        skill="summarize",
+        params={
+            "agent_id": "acp-agent-01",
+            "task": "Summarize the latest AI news",
+            "input": {"topic": "AI agents"},
+            "session_id": "session-acp-001",
+        },
+    ),
+)
 
-    @property
-    def source_protocol(self) -> str:
-        return "acp/1.0"
-
-    def can_bridge(self, source: str, target: str) -> bool:
-        return (source == "acp/1.0" and target == "aurc/0.1") or \
-               (source == "aurc/0.1" and target == "acp/1.0")
-
-    async def translate_to_aurc(self, acp_message: dict) -> AURCMessage:
-        """ACP REST payload → AURC message / ACP REST 载荷 → AURC 消息"""
-        bridge_ctx = BridgeContext(
-            origin_protocol="acp/1.0",
-            bridged_from="acp/1.0",
-            bridge_chain=["acp→aurc"],
-        )
-        return AURCMessage(
-            source=f"acp:external/{acp_message.get('sender', 'unknown')}",
-            target=acp_message.get("target", "aurc:local/handler"),
-            type=MessageDirection.REQUEST,
-            body=MessageBody(
-                method=acp_message.get("method", "invoke"),
-                skill=acp_message.get("skill", ""),
-                params=acp_message.get("params", {}),
-            ),
-            protocol_context=bridge_ctx,
-        )
-
-    async def translate_from_aurc(self, aurc_message: AURCMessage) -> dict:
-        """AURC message → ACP REST payload / AURC 消息 → ACP REST 载荷"""
-        body = aurc_message.body
-        return {
-            "sender": aurc_message.source,
-            "target": aurc_message.target,
-            "method": body.method,
-            "skill": body.skill,
-            "params": body.params,
-            "result": body.result,
-        }
-
-    async def map_capabilities(self, acp_endpoints: list[dict]) -> list[dict]:
-        return [
-            {
-                "skill_id": f"acp:{ep.get('name', '')}",
-                "name": ep.get("name", ""),
-                "description": ep.get("description", ""),
-                "tags": ["acp-bridge"],
-            }
-            for ep in acp_endpoints
-        ]
+acp_msg = await acp_bridge.translate_from_aurc(aurc_delegation)
+# {
+#     "method": "invoke",
+#     "id": "...",
+#     "params": {"agent_id": "acp-agent-01", "task": "...", "input": {...}, "session_id": "..."}
+# }
 ```
+
+AURC `response` messages map to ACP `completed`/`failed` results, `stream` messages map to ACP streaming updates, and `notification` messages map to ACP notification events (`task.started`, `task.completed`, etc.).
+
+AURC `response` 映射为 ACP `completed`/`failed` 结果，`stream` 映射为 ACP 流式更新，`notification` 映射为 ACP 通知事件（`task.started`、`task.completed` 等）。
+
+### ACP Agent Descriptor Conversion / ACP Agent 描述符转换
+
+```python
+acp_descriptor = {
+    "name": "Summarizer",
+    "description": "Summarization agent",
+    "skills": [{"id": "summarize", "name": "Summarize", "description": "Summarize text"}],
+    "authentication": {"methods": ["api_key"]},
+}
+
+aurc_descriptor = acp_bridge.map_agent_card(acp_descriptor)
+# Returns dict with aurc_id, capabilities, protocols, auth, etc.
+```
+
+> **Note / 说明:** The template below remains useful as a reference for bridges whose semantics differ from ACP's. For ACP itself, prefer the built-in `ACPBridge`.
+>
+> **说明：** 下方模板对于语义与 ACP 不同的桥接器仍有参考价值。对于 ACP 本身，请优先使用内置 `ACPBridge`。
 
 ---
 

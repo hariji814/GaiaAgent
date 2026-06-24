@@ -1,6 +1,8 @@
 # AURC Protocol Quick Start Guide
 # AURC 协议快速入门指南
 
+> **[← Back to README](../../README.md)** | [Protocol Spec](../../PROTOCOL.md) | [Architecture](../architecture.md) | [API Reference](../api-reference.md)
+>
 > Build your first AURC agent in 5 minutes / 5 分钟构建你的第一个 AURC Agent
 
 ## Prerequisites / 前提条件

@@ -1,5 +1,7 @@
 # Security Guide / 安全指南
 
+> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Security Model Deep Dive](../architecture/security-model.md) | [Protocol Spec](../../PROTOCOL.md)
+>
 > Authentication, authorization, delegation chains, and audit logging for AURC agents
 > AURC Agent 的认证、授权、委托链和审计日志
 

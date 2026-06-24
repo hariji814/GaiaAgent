@@ -269,13 +269,14 @@ _SAMPLE_A2A_MESSAGE: dict[str, Any] = {
 }
 
 _SAMPLE_ACP_MESSAGE: dict[str, Any] = {
-    "type": "run",
-    "thread_id": "thread-001",
-    "run_id": "run-001",
-    "assistant_id": "acp-agent-01",
-    "input": [
-        {"role": "user", "content": "Summarize the latest AI news"},
-    ],
+    "method": "invoke",
+    "id": "acp-req-1",
+    "params": {
+        "agent_id": "acp-agent-01",
+        "task": "Summarize the latest AI news",
+        "input": {"topic": "AI agents"},
+        "session_id": "session-acp-001",
+    },
 }
 
 
@@ -287,6 +288,7 @@ def _cmd_bridge_test(args: argparse.Namespace) -> int:
     支持 MCP、A2A 和 ACP 协议
     """
     from gaiaagent.bridges.a2a import A2ABridge
+    from gaiaagent.bridges.acp import ACPBridge
     from gaiaagent.bridges.base import MCPBridge
 
     quiet = args.quiet
@@ -300,13 +302,8 @@ def _cmd_bridge_test(args: argparse.Namespace) -> int:
         bridge = A2ABridge()
         sample = _SAMPLE_A2A_MESSAGE
     elif protocol == "acp":
-        # ACP bridge is planned but not yet implemented / ACP 桥接器已规划但尚未实现
-        _print(f"{_FAIL} ACP bridge is not yet implemented.", quiet)
-        _print(f"  {_ARROW} ACP bridge support is planned for a future release.", quiet)
-        _print(f"  {_ARROW} Currently available: mcp, a2a", quiet)
-        if quiet:
-            print(json.dumps({"error": "acp_bridge_not_implemented", "available": ["mcp", "a2a"]}))
-        return 1
+        bridge = ACPBridge()
+        sample = _SAMPLE_ACP_MESSAGE
     else:
         _error(f"Unknown protocol: {protocol}. Use: mcp, a2a, or acp")
         return 1

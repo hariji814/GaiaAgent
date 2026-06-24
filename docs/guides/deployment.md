@@ -1,5 +1,7 @@
 # Deployment Guide / 部署指南
 
+> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../PROTOCOL.md) | [API Reference](../api-reference.md)
+>
 > Deploy AURC agents for local development, Docker containers, and production
 > 为本地开发、Docker 容器和生产环境部署 AURC Agent
 
@@ -33,6 +35,9 @@ pip install gaiaagent
 
 # Install with HTTP transport support / 安装含 HTTP 传输支持
 pip install gaiaagent[http]
+
+# Install with WebSocket transport / 安装含 WebSocket 传输
+pip install gaiaagent[websocket]
 
 # Install with Claude integration / 安装含 Claude 集成
 pip install gaiaagent[claude]
@@ -109,7 +114,7 @@ WORKDIR /app
 
 # Install dependencies / 安装依赖
 COPY pyproject.toml .
-RUN pip install --no-cache-dir gaiaagent[http,claude]
+RUN pip install --no-cache-dir gaiaagent[http,websocket,claude]
 
 # Copy source / 复制源码
 COPY src/ src/
@@ -314,38 +319,70 @@ server {
 
 ## WebSocket Transport / WebSocket 传输配置
 
-WebSocket support is planned for real-time bidirectional communication.
+For real-time, bidirectional, persistent communication, use the built-in WebSocket transport (`gaiaagent.transport.websocket`). Install the optional dependency first:
 
-WebSocket 支持计划用于实时双向通信。
+对于实时、双向、持久化的通信，使用内置 WebSocket 传输（`gaiaagent.transport.websocket`）。先安装可选依赖：
 
-### Planned Architecture / 计划的架构
-
-```
-┌─────────────┐    WebSocket (wss://)    ┌──────────────┐
-│ AURC Agent  │ ←──────────────────────→ │ AURC Server  │
-│ (Client)    │    Bidirectional         │ (WebSocket)  │
-└─────────────┘    Persistent            └──────────────┘
+```bash
+pip install gaiaagent[websocket]   # included in gaiaagent[all]
 ```
 
-### Planned API / 计划的 API
+### Architecture / 架构
+
+```
+┌─────────────┐    WebSocket (ws/wss)    ┌──────────────────────┐
+│ AURC Agent  │ ←──────────────────────→ │ WebSocketTransport   │
+│ (Client)    │    Bidirectional         │ Server               │
+└─────────────┘    Persistent            └──────────────────────┘
+```
+
+### Server / 服务器
 
 ```python
-# Future WebSocket transport / 未来的 WebSocket 传输
-from gaiaagent.transport.websocket import WebSocketTransport
+from gaiaagent.transport.websocket import WebSocketTransportServer
 
-ws = WebSocketTransport(url="wss://aurc.example.com/aurc/ws")
-await ws.connect()
+async def handle_message(msg: dict) -> dict | None:
+    # Route the AURC message and return a response (or None)
+    # 路由 AURC 消息并返回响应（或返回 None）
+    return {"status": "processed", "echo": msg}
 
-# Send messages / 发送消息
-await ws.send(aurc_message)
+server = WebSocketTransportServer(host="0.0.0.0", port=8765)
+server.set_handler(handle_message)
+await server.start()              # blocks until stopped / 阻塞直到停止
 
-# Receive messages / 接收消息
-async for msg in ws.receive():
-    print(f"Received: {msg}")
+# Broadcast to every connected client / 向所有已连接客户端广播
+await server.broadcast({"event": "shutdown", "reason": "maintenance"})
 
-# Streaming responses / 流式响应
-await ws.send_streaming(request, callback=on_chunk)
+print(server.client_count)       # connected clients / 已连接客户端数
+await server.stop()
 ```
+
+### Client / 客户端
+
+```python
+from gaiaagent.transport.websocket import WebSocketTransportClient
+
+client = WebSocketTransportClient(url="ws://localhost:8765", reconnect=True)
+await client.connect()
+
+# Send and receive / 发送与接收
+await client.send({"type": "request", "method": "invoke", "skill": "analyze"})
+response = await client.receive()
+
+# Background subscription with auto-reconnect (exponential backoff)
+# 后台订阅，带指数退避自动重连
+async def on_message(msg: dict) -> dict | None:
+    print(f"Received: {msg}")
+    return None
+
+await client.subscribe(on_message)
+# ...
+await client.close()
+```
+
+The client reconnects automatically with exponential backoff (1s → 30s cap) when `reconnect=True`, making it suitable for long-running agents behind flaky networks.
+
+当 `reconnect=True` 时，客户端会以指数退避（1s → 上限 30s）自动重连，适合网络不稳的长期运行 Agent。
 
 ---
 

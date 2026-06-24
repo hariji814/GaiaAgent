@@ -38,11 +38,14 @@ http = [
     "httpx>=0.24",
     "uvicorn>=0.20",
 ]
+websocket = [
+    "websockets>=12.0",
+]
 claude = [
     "anthropic>=0.40",
 ]
 all = [
-    "gaiaagent[dev,http,claude]",
+    "gaiaagent[dev,http,websocket,claude]",
 ]
 
 [project.scripts]

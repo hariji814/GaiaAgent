@@ -1,5 +1,7 @@
 # Workflow Patterns Guide / 工作流模式指南
 
+> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../PROTOCOL.md) | [API Reference](../api-reference.md)
+>
 > Five canonical orchestration patterns for AURC agents, powered by Claude
 > AURC Agent 的五种经典编排模式，由 Claude 驱动
 

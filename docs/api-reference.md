@@ -1,5 +1,7 @@
 # API Reference / API 参考
 
+> **[← Back to README](../README.md)** | [Protocol Spec](../PROTOCOL.md) | [Architecture](architecture.md) | [Quick Start](guides/quickstart.md)
+>
 > Complete API documentation for the GaiaAgent / AURC Protocol SDK
 > GaiaAgent / AURC 协议 SDK 完整 API 文档
 
@@ -480,7 +482,7 @@ class SessionManager:
 
 ## Bridge APIs / 桥接器 API
 
-Module: `gaiaagent.bridges.base`, `gaiaagent.bridges.a2a`
+Module: `gaiaagent.bridges.base`, `gaiaagent.bridges.a2a`, `gaiaagent.bridges.acp`
 
 ### ProtocolBridge (Interface / 接口)
 
@@ -508,6 +510,22 @@ class A2ABridge:
     source_protocol = "a2a/1.0"
     # Implements ProtocolBridge / 实现 ProtocolBridge
     def map_agent_card(agent_card: dict) → dict
+```
+
+### ACPBridge
+
+Module: `gaiaagent.bridges.acp`
+
+```python
+class ACPBridge:
+    source_protocol = "acp/1.0"
+    # Implements ProtocolBridge / 实现 ProtocolBridge
+    # ACP invoke      → AURC delegation
+    # ACP cancel      → AURC notification (task_cancelled)
+    # ACP get-task    → AURC request (query_task_status)
+    # ACP list-tasks  → AURC request (list_tasks)
+    # ACP set-task    → AURC notification (task_state_updated)
+    def map_agent_card(agent_descriptor: dict) → dict
 ```
 
 ### BridgeRegistry
@@ -870,17 +888,18 @@ Module: `gaiaagent.cli`
 
 ### aurc serve
 
-Start the AURC harness with HTTP transport.
+Start the AURC harness with HTTP transport. Optionally enable the health dashboard.
 
-启动带 HTTP 传输的 AURC Harness。
+启动带 HTTP 传输的 AURC Harness。可选启用健康仪表盘。
 
 ```bash
-aurc serve [--host HOST] [--port PORT] [--config CONFIG]
+aurc serve [--host HOST] [--port PORT] [--dashboard]
 
 # Options / 选项:
-#   --host   Bind address (default: 0.0.0.0) / 绑定地址
-#   --port   Port number (default: 8080) / 端口号
-#   --config Path to agent config file / Agent 配置文件路径
+#   --host       Bind address (default: 0.0.0.0) / 绑定地址
+#   --port       Port number (default: 8080) / 端口号
+#   --dashboard  Enable health dashboard / 启用健康仪表盘
+#   -q, --quiet  Machine-readable output / 机器可读输出
 ```
 
 ### aurc version
@@ -902,7 +921,7 @@ Show system and configuration info.
 
 ```bash
 aurc info
-# Output: Python version, installed extras, config paths
+# Output: Python version, installed bridges, AURC version
 ```
 
 ### aurc validate
@@ -918,18 +937,33 @@ aurc validate <path-to-descriptor.json>
 
 ### aurc bridge test
 
-Test a protocol bridge connection.
+Test a protocol bridge translation using built-in sample messages (no live server required).
 
-测试协议桥接器连接。
+使用内置示例消息测试协议桥接器翻译（无需真实服务器）。
 
 ```bash
-aurc bridge test --protocol mcp --url http://localhost:3000
-aurc bridge test --protocol a2a --url http://localhost:4000
+aurc bridge test --protocol mcp
+aurc bridge test --protocol a2a
+aurc bridge test --protocol acp
 
 # Options / 选项:
-#   --protocol  Protocol to test (mcp, a2a, acp)
-#   --url       Target server URL
-#   --timeout   Connection timeout in seconds (default: 10)
+#   --protocol  Protocol to test: mcp, a2a, or acp (required)
+#   -q, --quiet Machine-readable JSON output / 机器可读 JSON 输出
+#
+# Runs three steps per protocol:
+#   1. translate_to_aurc   (external → AURC)
+#   2. translate_from_aurc (AURC → external)
+#   3. map_capabilities     (external caps → AURC skills)
+```
+
+### aurc registry export
+
+Export the local registry to JSON (printed to stdout).
+
+将本地注册中心导出为 JSON（输出到标准输出）。
+
+```bash
+aurc registry export
 ```
 
 ---

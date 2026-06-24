@@ -3,6 +3,8 @@
 **Agent Unified Runtime & Communication Protocol**
 **Agent 统一运行时与通信协议**
 
+> **[← Back to README](README.md)** | [Architecture](docs/architecture.md) | [API Reference](docs/api-reference.md) | [Quick Start](docs/guides/quickstart.md)
+>
 > Status: Draft / 状态：草案
 > Version: 0.1.0
 > License: CC BY-SA 4.0 (specification) / AGPL-3.0 (implementation)

@@ -1,5 +1,7 @@
 # AURC Architecture Overview / 架构概览
 
+> **[← Back to README](../../README.md)** | [Protocol Spec](../../PROTOCOL.md) | [Deep Dive](../architecture.md) | [API Reference](../api-reference.md)
+>
 > Developer-friendly summary of the AURC protocol architecture.
 > For the full specification, see [PROTOCOL.md](../../PROTOCOL.md).
 

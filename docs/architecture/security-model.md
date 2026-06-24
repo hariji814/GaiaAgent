@@ -1,5 +1,7 @@
 # Security Model Deep Dive / 安全模型详解
 
+> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../PROTOCOL.md) | [API Reference](../api-reference.md)
+
 ## Threat Model / 威胁模型
 
 AURC addresses these threats in multi-agent systems:

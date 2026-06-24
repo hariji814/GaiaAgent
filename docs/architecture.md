@@ -1,7 +1,10 @@
 # Architecture Deep Dive / 架构深度解析
 
-> A comprehensive guide to the AURC protocol architecture
-> AURC 协议架构全面指南
+> **[← Back to README](../README.md)** | [Protocol Spec](../PROTOCOL.md) | [API Reference](api-reference.md) | [Quick Start](guides/quickstart.md)
+>
+> A comprehensive guide to the AURC protocol architecture — the first complete 8-layer protocol stack for AI agent communication.
+>
+> AURC 协议架构全面指南 — AI Agent 通信领域首个完整的 8 层协议栈。
 
 ---
 
@@ -75,7 +78,7 @@ AURC 使用 8 层模型 (L0–L7)。每一层都可以独立测试和替换。
 │ L4  Protocol Bridges / 协议桥接层                                     │
 │     MCPBridge  — MCP JSON-RPC ↔ AURC                                │
 │     A2ABridge  — A2A tasks/send ↔ AURC                              │
-│     ACPBridge  — ACP REST ↔ AURC (planned)                          │
+│     ACPBridge  — ACP REST envelope ↔ AURC                           │
 │     BridgeRegistry — manages all bridges / 管理所有桥接器              │
 ├──────────────────────────────────────────────────────────────────────┤
 │ L3  Unified Message Bus / 统一消息总线                                │
@@ -96,7 +99,7 @@ AURC 使用 8 层模型 (L0–L7)。每一层都可以独立测试和替换。
 ├──────────────────────────────────────────────────────────────────────┤
 │ L0  Transport / 传输层                                               │
 │     HTTPTransportServer / HTTPTransportClient (HTTP/2 + ASGI)       │
-│     WebSocket (planned) / 计划中                                     │
+│     WebSocketTransportServer / WebSocketTransportClient             │
 │     stdio (local development) / 标准输入输出（本地开发）                │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -122,7 +125,7 @@ The transport layer handles raw message delivery over the network.
 | Transport | Use Case / 用例 | Status / 状态 |
 |-----------|----------|--------|
 | HTTP/2 (ASGI + uvicorn) | Production, cross-network / 生产环境 | Implemented |
-| WebSocket | Real-time bidirectional / 实时双向 | Planned |
+| WebSocket | Real-time bidirectional / 实时双向 | Implemented |
 | stdio | Local dev, CLI tools / 本地开发 | Interface only |
 | gRPC | High-performance internal / 高性能内部 | Planned |
 
