@@ -1,12 +1,15 @@
 """AURC Claude Integration — use Claude as the reasoning engine for AURC agents.
 AURC Claude 集成 — 将 Claude 用作 AURC Agent 的推理引擎
 
-This module bridges the AURC runtime harness with Anthropic's Claude,
-enabling AURC agents to use Claude for:
-    - Natural language understanding and generation
-    - Dynamic tool selection and routing
-    - Multi-step reasoning and planning
-    - Evaluator-optimizer patterns
+This module bridges the AURC runtime harness with Claude. The agentic loop
+(`ClaudeLLM.agentic_loop`) has two backends (see LOOP_ROADMAP.md):
+    - **Claude Code CLI** (`claude -p --output-format stream-json`) — the
+      reference agentic loop, used when the `claude` binary is on PATH and no
+      caller-supplied tool handlers must run in-process. See `claude_cli.py`.
+    - **Built-in `anthropic`-based loop** — the fallback (CLI absent, or
+      in-process tool handlers required).
+Tool execution in the built-in path goes through `ClaudeLLM._execute_tool`,
+the single seam Step 3 of the Loop Roadmap overrides to route via the bus.
 
 Integration Architecture / 集成架构:
 
@@ -22,6 +25,7 @@ Integration Architecture / 集成架构:
     │                               │               │
     │  ┌────────────────────────────▼───────────┐  │
     │  │  Claude Agent SDK / Anthropic API      │  │
+    │  │  → claude CLI (primary) / Anthropic    │  │
     │  └────────────────────────────────────────┘  │
     └──────────────────────────────────────────────┘
 
@@ -46,11 +50,30 @@ Usage / 用法:
 from __future__ import annotations
 
 import logging
+import json
 import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Awaitable
 
 logger = logging.getLogger(__name__)
+
+
+def _stringify_result(result: Any) -> str:
+    """Render a tool-handler result as a string for the model.
+    把工具 handler 结果渲染为给模型的字符串
+
+    dict/list results are JSON-encoded (so the model can parse structure);
+    everything else uses ``str()``. Avoids the Python-repr drift from
+    ``str(dict)`` (e.g. single quotes) that breaks tool-use chains.
+    """
+    if isinstance(result, (dict, list)):
+        try:
+            return json.dumps(result, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            return str(result)
+    if isinstance(result, (bytes, bytearray)):
+        return result.decode("utf-8", errors="replace")
+    return str(result)
 
 
 # =============================================================================
@@ -191,12 +214,34 @@ class ClaudeLLM:
         api_key: str | None = None,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        *,
+        cli_path: str | None = None,
+        cli_args: list[str] | None = None,
+        permission_mode: str | None = None,
+        mcp_config: str | None = None,
+        allowed_tools: list[str] | None = None,
+        timeout: float | None = None,
+        trace_recorder: Any = None,
+        agent_id: str | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self._max_tokens = max_tokens
         self._system_prompt = system_prompt
         self._conversation_history: list[dict] = []
+        # Claude Code CLI backend config (Loop Roadmap Step 2). When the `claude`
+        # CLI is on PATH, `agentic_loop` delegates to it; otherwise the built-in
+        # hand-rolled loop is used. These fields are pass-through CLI flags /
+        # AURC runtime handles.
+        # Claude Code CLI 后端配置(Loop Roadmap Step 2)。
+        self._cli_path = cli_path
+        self._cli_args = cli_args
+        self._permission_mode = permission_mode
+        self._mcp_config = mcp_config
+        self._allowed_tools = allowed_tools
+        self._timeout = timeout
+        self._trace_recorder = trace_recorder
+        self._agent_id = agent_id
 
     async def ask(
         self,
@@ -261,6 +306,8 @@ class ClaudeLLM:
         tools: list[ClaudeTool] | None = None,
         max_turns: int = 10,
         system: str | None = None,
+        *,
+        correlation_id: str | None = None,
     ) -> ClaudeResponse:
         """Run an agentic loop — Claude calls tools until done.
         运行 Agentic 循环 — Claude 调用工具直到完成
@@ -268,14 +315,88 @@ class ClaudeLLM:
         This implements the core "agent" pattern: Claude decides which
         tools to call, executes them, and continues reasoning with results.
 
+        Backend selection / 后端选择 (Loop Roadmap Step 2):
+        If the `claude` CLI is on PATH and no caller-supplied tool handlers
+        need to run in-process, delegate to the CLI headless loop
+        (`claude -p … --output-format stream-json`). Otherwise fall back to
+        the built-in `anthropic`-based loop. To make the CLI's tool calls
+        enter the AURC bus, set ``mcp_config`` to an AURC MCP server
+        (see :mod:`gaiaagent.mcp.server`); then ``tools/call`` crosses the
+        subprocess boundary at the protocol level through ``MCPBridge``.
+
         Args:
             prompt: Initial user message / 初始用户消息
             tools: Available tools with handlers / 带处理函数的可用工具
             max_turns: Maximum tool-use turns / 最大工具使用轮次
             system: System prompt / 系统提示词
+            correlation_id: Optional AURC correlation id for trace linkage /
+                可选 AURC correlation id,用于追踪关联
 
         Returns:
             Final ClaudeResponse after all tool calls complete
+        """
+        from .claude_cli import cli_available, prompt_too_long, run_agentic_loop
+
+        has_handler_tools = bool(tools) and any(
+            getattr(t, "handler", None) is not None for t in (tools or [])
+        )
+        # A prompt too long for a CLI *argument* forces the in-process loop
+        # (avoids Windows command-line truncation; long prompts should use MCP).
+        if cli_available(self._cli_path) and not has_handler_tools and not prompt_too_long(prompt):
+            return await run_agentic_loop(
+                prompt=prompt,
+                tools=tools,
+                max_turns=max_turns,
+                system=system or self._system_prompt,
+                model=self._model,
+                api_key=self._api_key,
+                max_tokens=self._max_tokens,
+                execute_tool=self._execute_tool,
+                cli_path=self._cli_path,
+                cli_args=self._cli_args,
+                permission_mode=self._permission_mode,
+                mcp_config=self._mcp_config,
+                allowed_tools=self._allowed_tools,
+                timeout=self._timeout,
+                trace_recorder=self._trace_recorder,
+                agent_id=self._agent_id,
+                correlation_id=correlation_id,
+            )
+        if prompt_too_long(prompt):
+            logger.info("prompt exceeds CLI arg limit; using built-in loop")
+        return await self._agentic_loop_builtin(
+            prompt=prompt, tools=tools, max_turns=max_turns, system=system
+        )
+
+    async def _execute_tool(
+        self, tool: ClaudeTool | None, tool_input: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Execute one tool call (built-in fallback path only).
+
+        On the CLI path the CLI runs its own tools; bus routing there is done
+        at the MCP layer via ``--mcp-config``, not by overriding this seam.
+        Returns a tool_result-shaped dict: ``{"content": str, "is_error": bool}``.
+        """
+        name = tool.name if tool else "<unknown>"
+        if not tool or not tool.handler:
+            return {"content": f"Tool '{name}' not found or no handler", "is_error": True}
+        logger.info("Claude calling tool: %s(%s)", name, tool_input)
+        try:
+            result = await tool.handler(**tool_input)
+            return {"content": _stringify_result(result), "is_error": False}
+        except Exception as e:
+            return {"content": f"Error: {e}", "is_error": True}
+
+    async def _agentic_loop_builtin(
+        self,
+        prompt: str,
+        tools: list[ClaudeTool] | None = None,
+        max_turns: int = 10,
+        system: str | None = None,
+    ) -> ClaudeResponse:
+        """Built-in hand-rolled agentic loop — the fallback when the `claude` CLI is absent
+        or caller-supplied tool handlers must run in-process.
+        内置手写循环 —— CLI 缺失或需进程内执行 handler 时的降级路径
         """
         try:
             import anthropic
@@ -297,7 +418,7 @@ class ClaudeLLM:
 
             last_response = None
 
-            for turn in range(max_turns):
+            for _turn in range(max_turns):
                 response = await client.messages.create(**kwargs)
                 last_response = response
 
@@ -305,34 +426,15 @@ class ClaudeLLM:
                 if response.stop_reason == "end_turn":
                     return self._parse_response(response)
 
-                # Process tool calls / 处理工具调用
-                tool_results = []
+                # Process tool calls via the _execute_tool seam / 经 _execute_tool 缝处理工具调用
+                tool_results: list[dict[str, Any]] = []
                 for block in response.content:
                     if block.type == "tool_use":
                         tool = tool_map.get(block.name)
-                        if tool and tool.handler:
-                            logger.info("Claude calling tool: %s(%s)", block.name, block.input)
-                            try:
-                                result = await tool.handler(**block.input)
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": str(result),
-                                })
-                            except Exception as e:
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": block.id,
-                                    "content": f"Error: {e}",
-                                    "is_error": True,
-                                })
-                        else:
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": block.id,
-                                "content": f"Tool '{block.name}' not found or no handler",
-                                "is_error": True,
-                            })
+                        tr = await self._execute_tool(tool, dict(block.input))
+                        tr["tool_use_id"] = block.id
+                        tr["type"] = "tool_result"
+                        tool_results.append(tr)
 
                 # Add assistant response and tool results to conversation
                 # 将助手响应和工具结果添加到对话
@@ -346,9 +448,14 @@ class ClaudeLLM:
                 })
                 kwargs["messages"] = messages
 
-            # Max turns reached / 达到最大轮次
+            # Max turns reached — the loop exhausted without `end_turn`, so the
+            # model still wanted more tool calls. Report `max_turns` consistently
+            # with the CLI backend (not the raw last-response stop_reason).
+            # 达到最大轮次 —— 与 CLI 后端一致地报告 max_turns
             if last_response:
-                return self._parse_response(last_response)
+                parsed = self._parse_response(last_response)
+                parsed.stop_reason = "max_turns"
+                return parsed
             return ClaudeResponse(text="[Max turns reached]", stop_reason="max_turns")
 
         except ImportError:
@@ -465,11 +572,28 @@ class ClaudeAgent:
         model: str = "claude-sonnet-4-20250514",
         api_key: str | None = None,
         system_prompt: str | None = None,
+        *,
+        cli_path: str | None = None,
+        cli_args: list[str] | None = None,
+        permission_mode: str | None = None,
+        mcp_config: str | None = None,
+        allowed_tools: list[str] | None = None,
+        timeout: float | None = None,
+        trace_recorder: Any = None,
+        agent_id: str | None = None,
     ) -> None:
         self.claude = ClaudeLLM(
             model=model,
             api_key=api_key,
             system_prompt=system_prompt,
+            cli_path=cli_path,
+            cli_args=cli_args,
+            permission_mode=permission_mode,
+            mcp_config=mcp_config,
+            allowed_tools=allowed_tools,
+            timeout=timeout,
+            trace_recorder=trace_recorder,
+            agent_id=agent_id,
         )
 
     def get_claude_tools(self) -> list[ClaudeTool]:

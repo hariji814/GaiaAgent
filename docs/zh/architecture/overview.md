@@ -1,11 +1,12 @@
-# AURC Architecture Overview / 架构概览
+# 架构概览
 
-> **[← Back to README](../../README.md)** | [Protocol Spec](../../PROTOCOL.md) | [Deep Dive](../architecture.md) | [API Reference](../api-reference.md)
+> 🌐 [English](../../en/architecture/overview.md)
+> **[← Back to README](../../../README.zh.md)** | [Protocol Spec](../../../PROTOCOL.zh.md) | [Deep Dive](../architecture.md) | [API Reference](../api-reference.md)
 >
-> Developer-friendly summary of the AURC protocol architecture.
-> For the full specification, see [PROTOCOL.md](../../PROTOCOL.md).
+> AURC 协议架构的开发者友好概览。
+> 完整规范请参见 [PROTOCOL.md](../../../PROTOCOL.zh.md)。
 
-## System Map / 系统全景
+## 系统全景
 
 ```
                     ┌──────────────────────────────────┐
@@ -55,7 +56,7 @@
               └─────────────────────────────────────────┘
 ```
 
-## Module Dependency Graph / 模块依赖图
+## 模块依赖图
 
 ```
 sdk/decorators ──→ core/identity
@@ -75,23 +76,23 @@ integrations/claude ←→ workflows/orchestrator
 transport/http   registry/local
 ```
 
-## Data Flow Examples / 数据流示例
+## 数据流示例
 
-### Intra-Harness Message (同 Harness 内消息)
+### 同 Harness 内消息
 
 ```
 Agent A ──→ MessageRouter ──→ Agent B
               (direct)
 ```
 
-### Cross-Protocol Message (跨协议消息)
+### 跨协议消息
 
 ```
 Agent A ──→ MessageRouter ──→ MCPBridge ──→ External MCP Server
               (bridge)        (translate)
 ```
 
-### Multi-Agent Workflow (多 Agent 工作流)
+### 多 Agent 工作流
 
 ```
 User ──→ Orchestrator ──→ ClaudeLLM (decompose)
@@ -103,9 +104,9 @@ User ──→ Orchestrator ──→ ClaudeLLM (decompose)
                 └──→ Synthesizer ──→ User
 ```
 
-## Key Design Decisions / 关键设计决策
+## 关键设计决策
 
-| Decision | Choice | Rationale |
+| 决策 | 选择 | 理由 |
 |----------|--------|-----------|
 | ID Format | URN (`aurc:ns/name:ver`) | Simple, no blockchain dependency |
 | Message Format | JSON | Human-readable, broad ecosystem |
@@ -116,7 +117,7 @@ User ──→ Orchestrator ──→ ClaudeLLM (decompose)
 | Error Recovery | Policy-based strategies | Configurable per-agent |
 | Auth | Multi-method (API Key + JWT) | Flexible for dev and production |
 
-## Extension Points / 扩展点
+## 扩展点
 
 1. **Custom Bridges**: Implement `ProtocolBridge` for proprietary protocols
 2. **Custom Recovery Strategies**: Add to `RecoveryPolicy.strategies`

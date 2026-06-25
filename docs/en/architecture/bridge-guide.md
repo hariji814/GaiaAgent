@@ -1,19 +1,16 @@
-# Bridge Developer Guide / 协议桥接开发指南
+# Bridge Developer Guide
 
-> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../PROTOCOL.md) | [API Reference](../api-reference.md)
+> 🌐 [中文版](../../zh/architecture/bridge-guide.md)
+> **[← Back to README](../../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../../PROTOCOL.md) | [API Reference](../api-reference.md)
 >
 > How to write a custom protocol bridge for AURC.
-> 如何为 AURC 编写自定义协议桥接器。
 
-## What is a Bridge? / 什么是 Bridge?
+## What is a Bridge?
 
 A Bridge translates between AURC's canonical message format and an external protocol.
 It enables AURC agents to communicate with agents on other protocols (MCP, A2A, gRPC, etc.).
 
-Bridge 在 AURC 的标准消息格式和外部协议之间进行翻译。
-它使 AURC Agent 能够与其他协议上的 Agent 通信。
-
-## Bridge Interface / Bridge 接口
+## Bridge Interface
 
 Every bridge must implement these methods:
 
@@ -44,9 +41,9 @@ class MyCustomBridge:
         ...
 ```
 
-## Step-by-Step: Writing a gRPC Bridge / 编写 gRPC Bridge
+## Step-by-Step: Writing a gRPC Bridge
 
-### 1. Define the mapping / 定义映射
+### 1. Define the mapping
 
 | gRPC Concept | AURC Concept |
 |-------------|-------------|
@@ -56,7 +53,7 @@ class MyCustomBridge:
 | Server streaming | stream |
 | Service descriptor | AgentDescriptor |
 
-### 2. Implement translate_to_aurc / 实现 translate_to_aurc
+### 2. Implement translate_to_aurc
 
 ```python
 async def translate_to_aurc(self, grpc_request: dict) -> AURCMessage:
@@ -77,7 +74,7 @@ async def translate_to_aurc(self, grpc_request: dict) -> AURCMessage:
     )
 ```
 
-### 3. Implement translate_from_aurc / 实现 translate_from_aurc
+### 3. Implement translate_from_aurc
 
 ```python
 async def translate_from_aurc(self, msg: AURCMessage) -> dict:
@@ -93,7 +90,7 @@ async def translate_from_aurc(self, msg: AURCMessage) -> dict:
         return {"result": msg.body.result}
 ```
 
-### 4. Register with BridgeRegistry / 注册到 BridgeRegistry
+### 4. Register with BridgeRegistry
 
 ```python
 from gaiaagent.bridges import BridgeRegistry
@@ -102,7 +99,7 @@ registry = BridgeRegistry()
 registry.register(GrpcBridge())
 ```
 
-### 5. Connect to MessageRouter / 连接到 MessageRouter
+### 5. Connect to MessageRouter
 
 ```python
 from gaiaagent.bus import MessageRouter
@@ -117,7 +114,7 @@ async def grpc_forwarder(msg: AURCMessage):
 router.register_bridge_forwarder("grpc", grpc_forwarder)
 ```
 
-## Testing Your Bridge / 测试 Bridge
+## Testing Your Bridge
 
 ```python
 import pytest
@@ -143,7 +140,7 @@ async def test_aurc_to_grpc():
     assert grpc_msg["method"] == "query"
 ```
 
-## Existing Bridges for Reference / 现有 Bridge 参考
+## Existing Bridges for Reference
 
 | Bridge | File | Protocol |
 |--------|------|----------|

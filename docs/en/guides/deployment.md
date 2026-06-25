@@ -1,57 +1,57 @@
-# Deployment Guide / 部署指南
+# Deployment Guide
 
-> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../PROTOCOL.md) | [API Reference](../api-reference.md)
+> 🌐 [中文版](../../zh/guides/deployment.md)
+> **[← Back to README](../../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../../PROTOCOL.md) | [API Reference](../api-reference.md)
 >
 > Deploy AURC agents for local development, Docker containers, and production
-> 为本地开发、Docker 容器和生产环境部署 AURC Agent
 
 ---
 
-## Table of Contents / 目录
+## Table of Contents
 
-1. [Local Development / 本地开发](#local-development--本地开发)
-2. [Docker Deployment / Docker 部署](#docker-deployment--docker-部署)
-3. [HTTP Transport / HTTP 传输配置](#http-transport--http-传输配置)
-4. [WebSocket Transport / WebSocket 传输配置](#websocket-transport--websocket-传输配置)
-5. [Health Dashboard / 健康面板](#health-dashboard--健康面板)
-6. [Monitoring and Observability / 监控和可观测性](#monitoring-and-observability--监控和可观测性)
-7. [Production Checklist / 生产清单](#production-checklist--生产清单)
+1. [Local Development](#local-development)
+2. [Docker Deployment](#docker-deployment)
+3. [HTTP Transport](#http-transport)
+4. [WebSocket Transport](#websocket-transport)
+5. [Health Dashboard](#health-dashboard)
+6. [Monitoring and Observability](#monitoring-and-observability)
+7. [Production Checklist](#production-checklist)
 
 ---
 
-## Local Development / 本地开发
+## Local Development
 
-### Prerequisites / 前提条件
+### Prerequisites
 
 - Python 3.10+
 - `uv` or `pip` package manager
-- (Optional) Docker for containerized deployment / Docker 用于容器化部署
+- (Optional) Docker for containerized deployment
 
-### Installation / 安装
+### Installation
 
 ```bash
-# Install from PyPI / 从 PyPI 安装
+# Install from PyPI
 pip install gaiaagent
 
-# Install with HTTP transport support / 安装含 HTTP 传输支持
+# Install with HTTP transport support
 pip install gaiaagent[http]
 
-# Install with WebSocket transport / 安装含 WebSocket 传输
+# Install with WebSocket transport
 pip install gaiaagent[websocket]
 
-# Install with Claude integration / 安装含 Claude 集成
+# Install with Claude integration
 pip install gaiaagent[claude]
 
-# Install everything / 安装全部
+# Install everything
 pip install gaiaagent[all]
 
-# Development install / 开发安装
+# Development install
 git clone https://github.com/gaiaagent/gaiaagent
 cd gaiaagent
 pip install -e ".[dev]"
 ```
 
-### Minimal Local Setup / 最小本地设置
+### Minimal Local Setup
 
 ```python
 import asyncio
@@ -75,7 +75,7 @@ async def main():
     await harness.register(agent.aurc_descriptor)
     await harness.start("aurc:local/my-agent:v1.0")
 
-    # Check health / 检查健康
+    # Check health
     health = await harness.health_check("aurc:local/my-agent:v1.0")
     print(f"Agent state: {health.state.value}")
     print(f"Health: {health.status.value}")
@@ -85,46 +85,46 @@ async def main():
 asyncio.run(main())
 ```
 
-### Running Tests / 运行测试
+### Running Tests
 
 ```bash
-# Run all tests / 运行所有测试
+# Run all tests
 pytest
 
-# Run with coverage / 带覆盖率
+# Run with coverage
 pytest --cov=gaiaagent
 
-# Type check / 类型检查
+# Type check
 mypy src/
 
-# Lint / 代码检查
+# Lint
 ruff check src/ tests/
 ```
 
 ---
 
-## Docker Deployment / Docker 部署
+## Docker Deployment
 
-### Dockerfile / Dockerfile
+### Dockerfile
 
 ```dockerfile
 FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# Install dependencies / 安装依赖
+# Install dependencies
 COPY pyproject.toml .
 RUN pip install --no-cache-dir gaiaagent[http,websocket,claude]
 
-# Copy source / 复制源码
+# Copy source
 COPY src/ src/
 COPY config/ config/
 
-# Non-root user / 非 root 用户
+# Non-root user
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
-# Health check / 健康检查
+# Health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
@@ -133,13 +133,13 @@ EXPOSE 8080
 CMD ["python", "-m", "gaiaagent.cli", "serve", "--host", "0.0.0.0", "--port", "8080"]
 ```
 
-### docker-compose.yml / docker-compose.yml
+### docker-compose.yml
 
 ```yaml
 version: "3.9"
 
 services:
-  # AURC Agent Host / AURC Agent 主机
+  # AURC Agent Host
   aurc-harness:
     build: .
     ports:
@@ -158,7 +158,7 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # MCP Server (example) / MCP 服务器（示例）
+  # MCP Server (example)
   mcp-web-search:
     image: mcp/web-search:latest
     ports:
@@ -166,7 +166,7 @@ services:
     environment:
       - SEARCH_API_KEY=${SEARCH_API_KEY}
 
-  # Monitoring / 监控
+  # Monitoring
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -188,13 +188,13 @@ volumes:
   grafana-data:
 ```
 
-### Multi-Agent Docker Compose / 多 Agent Docker Compose
+### Multi-Agent Docker Compose
 
 ```yaml
 version: "3.9"
 
 services:
-  # Orchestrator / 编排器
+  # Orchestrator
   orchestrator:
     build: ./agents/orchestrator
     ports:
@@ -206,7 +206,7 @@ services:
       - researcher
       - coder
 
-  # Research Agent / 研究 Agent
+  # Research Agent
   researcher:
     build: ./agents/researcher
     ports:
@@ -215,7 +215,7 @@ services:
       - AURC_AGENT_ID=aurc:prod/researcher:v1.0
       - AURC_ROLE=worker
 
-  # Code Agent / 代码 Agent
+  # Code Agent
   coder:
     build: ./agents/coder
     ports:
@@ -227,9 +227,9 @@ services:
 
 ---
 
-## HTTP Transport / HTTP 传输配置
+## HTTP Transport
 
-### Server Configuration / 服务器配置
+### Server Configuration
 
 ```python
 from gaiaagent.transport.http import HTTPTransportServer
@@ -237,35 +237,35 @@ from gaiaagent.harness.lifecycle import RuntimeHarness
 from gaiaagent.bus.router import MessageRouter
 from gaiaagent.core.message import AURCMessage
 
-# Setup / 设置
+# Setup
 harness = RuntimeHarness()
 router = MessageRouter()
 
-# Create message handler / 创建消息处理函数
+# Create message handler
 async def handle_message(msg_dict: dict) -> dict:
-    """Handle incoming HTTP AURC messages / 处理入站 HTTP AURC 消息"""
+    """Handle incoming HTTP AURC messages"""
     aurc_msg = AURCMessage(**msg_dict)
     result = await router.route(aurc_msg)
     return {"status": "processed", "result": result}
 
-# Start server / 启动服务器
+# Start server
 server = HTTPTransportServer(host="0.0.0.0", port=8080)
 server.set_handler(handle_message)
 await server.start()
 
 # Server exposes:
-# POST /aurc  — send AURC messages / 发送 AURC 消息
-# GET  /health — health check / 健康检查
+# POST /aurc  — send AURC messages
+# GET  /health — health check
 ```
 
-### Client Configuration / 客户端配置
+### Client Configuration
 
 ```python
 from gaiaagent.transport.http import HTTPTransportClient
 
 client = HTTPTransportClient(timeout_seconds=30.0)
 
-# Send a message to a remote agent / 向远程 Agent 发送消息
+# Send a message to a remote agent
 response = await client.send(
     url="http://remote-server:8080/aurc",
     message={
@@ -281,16 +281,14 @@ response = await client.send(
     },
 )
 
-# Check remote health / 检查远程健康
+# Check remote health
 health = await client.health_check("http://remote-server:8080/aurc")
 print(f"Remote status: {health['status']}")
 ```
 
-### TLS/HTTPS Configuration / TLS/HTTPS 配置
+### TLS/HTTPS Configuration
 
 For production, use a reverse proxy (nginx, Caddy) for TLS termination:
-
-生产环境中使用反向代理（nginx、Caddy）进行 TLS 终端:
 
 ```nginx
 # nginx.conf
@@ -317,17 +315,15 @@ server {
 
 ---
 
-## WebSocket Transport / WebSocket 传输配置
+## WebSocket Transport
 
 For real-time, bidirectional, persistent communication, use the built-in WebSocket transport (`gaiaagent.transport.websocket`). Install the optional dependency first:
-
-对于实时、双向、持久化的通信，使用内置 WebSocket 传输（`gaiaagent.transport.websocket`）。先安装可选依赖：
 
 ```bash
 pip install gaiaagent[websocket]   # included in gaiaagent[all]
 ```
 
-### Architecture / 架构
+### Architecture
 
 ```
 ┌─────────────┐    WebSocket (ws/wss)    ┌──────────────────────┐
@@ -336,28 +332,27 @@ pip install gaiaagent[websocket]   # included in gaiaagent[all]
 └─────────────┘    Persistent            └──────────────────────┘
 ```
 
-### Server / 服务器
+### Server
 
 ```python
 from gaiaagent.transport.websocket import WebSocketTransportServer
 
 async def handle_message(msg: dict) -> dict | None:
     # Route the AURC message and return a response (or None)
-    # 路由 AURC 消息并返回响应（或返回 None）
     return {"status": "processed", "echo": msg}
 
 server = WebSocketTransportServer(host="0.0.0.0", port=8765)
 server.set_handler(handle_message)
-await server.start()              # blocks until stopped / 阻塞直到停止
+await server.start()              # blocks until stopped
 
-# Broadcast to every connected client / 向所有已连接客户端广播
+# Broadcast to every connected client
 await server.broadcast({"event": "shutdown", "reason": "maintenance"})
 
-print(server.client_count)       # connected clients / 已连接客户端数
+print(server.client_count)       # connected clients
 await server.stop()
 ```
 
-### Client / 客户端
+### Client
 
 ```python
 from gaiaagent.transport.websocket import WebSocketTransportClient
@@ -365,12 +360,11 @@ from gaiaagent.transport.websocket import WebSocketTransportClient
 client = WebSocketTransportClient(url="ws://localhost:8765", reconnect=True)
 await client.connect()
 
-# Send and receive / 发送与接收
+# Send and receive
 await client.send({"type": "request", "method": "invoke", "skill": "analyze"})
 response = await client.receive()
 
 # Background subscription with auto-reconnect (exponential backoff)
-# 后台订阅，带指数退避自动重连
 async def on_message(msg: dict) -> dict | None:
     print(f"Received: {msg}")
     return None
@@ -382,17 +376,13 @@ await client.close()
 
 The client reconnects automatically with exponential backoff (1s → 30s cap) when `reconnect=True`, making it suitable for long-running agents behind flaky networks.
 
-当 `reconnect=True` 时，客户端会以指数退避（1s → 上限 30s）自动重连，适合网络不稳的长期运行 Agent。
-
 ---
 
-## Health Dashboard / 健康面板
+## Health Dashboard
 
-### Building a Health Dashboard / 构建健康面板
+### Building a Health Dashboard
 
 Use the Harness's health monitoring to build a real-time dashboard.
-
-使用 Harness 的健康监控构建实时面板。
 
 ```python
 from gaiaagent.harness.lifecycle import RuntimeHarness
@@ -400,10 +390,10 @@ from gaiaagent.core.types import AgentState, HealthStatus
 
 harness = RuntimeHarness()
 
-# Get all agent health reports / 获取所有 Agent 健康报告
+# Get all agent health reports
 reports = await harness.health_check_all()
 
-# Build dashboard data / 构建面板数据
+# Build dashboard data
 dashboard = {
     "total_agents": harness.agent_count,
     "agents": [],
@@ -426,7 +416,7 @@ for report in reports:
         "timestamp": report.timestamp.isoformat(),
     })
 
-# Count by state / 按状态计数
+# Count by state
 state_counts = {}
 for report in reports:
     state_counts[report.state.value] = state_counts.get(report.state.value, 0) + 1
@@ -436,10 +426,10 @@ print(f"States: {state_counts}")
 # {"ready": 3, "running": 2, "paused": 1}
 ```
 
-### Health Check Endpoint / 健康检查端点
+### Health Check Endpoint
 
 ```python
-# Expose via HTTP / 通过 HTTP 暴露
+# Expose via HTTP
 async def health_handler(request):
     reports = await harness.health_check_all()
     return {
@@ -449,10 +439,10 @@ async def health_handler(request):
     }
 ```
 
-### Agent Instance Details / Agent 实例详情
+### Agent Instance Details
 
 ```python
-# Get detailed agent information / 获取详细 Agent 信息
+# Get detailed agent information
 instance = harness.get_agent("aurc:gaia/researcher:v1.0")
 if instance:
     print(f"State: {instance.state.value}")
@@ -460,18 +450,16 @@ if instance:
     print(f"Metrics: {instance.metrics}")
     print(f"Last error: {instance.last_error}")
 
-# List agents by state / 按状态列出 Agent
+# List agents by state
 ready_agents = harness.list_agents(state=AgentState.READY)
 running_agents = harness.list_agents(state=AgentState.RUNNING)
 ```
 
 ---
 
-### Prometheus Scraping / Prometheus 抓取
+### Prometheus Scraping
 
 The dashboard exposes a `/metrics` endpoint in Prometheus text exposition format, scrape-ready with no sidecar:
-
-仪表盘在 `/metrics` 端点暴露 Prometheus 文本展示格式指标，可直接抓取，无需 sidecar：
 
 ```python
 from gaiaagent.observability import (
@@ -481,10 +469,9 @@ from gaiaagent.observability import (
 dashboard = HealthDashboard(harness, audit=audit, router=router)
 api = DashboardAPI(dashboard)
 # Mount `api.handle_request` in your ASGI server; GET /metrics returns
-# 将 api.handle_request 挂载到 ASGI 服务器；GET /metrics 返回
 # Prometheus text (content-type: text/plain; version=0.0.4).
 
-# Or render directly (e.g. for a sidecar or ad-hoc check) / 或直接渲染
+# Or render directly (e.g. for a sidecar or ad-hoc check)
 print(PrometheusMetricsExporter(dashboard).render())
 ```
 
@@ -499,20 +486,18 @@ scrape_configs:
 
 Metric families include `aurc_messages_total{route=...}` (direct / bridged / broadcast / dead_lettered / dropped), `aurc_agent_state{state=...}`, `aurc_health{status=...}`, and `aurc_audit_events_total{action=...}`.
 
-指标族包括 `aurc_messages_total{route=...}`（direct / bridged / broadcast / dead_lettered / dropped）、`aurc_agent_state{state=...}`、`aurc_health{status=...}` 与 `aurc_audit_events_total{action=...}`。
-
 ---
 
-## Monitoring and Observability / 监控和可观测性
+## Monitoring and Observability
 
-### Router Statistics / 路由器统计
+### Router Statistics
 
 ```python
 from gaiaagent.bus.router import MessageRouter
 
 router = MessageRouter()
 
-# After processing messages, check stats / 处理消息后检查统计
+# After processing messages, check stats
 stats = router.stats.to_dict()
 # {
 #     "total_routed": 1500,
@@ -525,45 +510,45 @@ stats = router.stats.to_dict()
 # }
 ```
 
-### Audit Log Monitoring / 审计日志监控
+### Audit Log Monitoring
 
 ```python
 from gaiaagent.security.audit import AuditLog, AuditAction, AuditSeverity
 
 audit = AuditLog()
 
-# Monitor error rates / 监控错误率
+# Monitor error rates
 auth_failures = audit.query(action=AuditAction.AUTH_FAILURE, limit=100)
 denied_requests = audit.query(action=AuditAction.AUTHZ_DENIED, limit=100)
 
-# Monitor bridging activity / 监控桥接活动
+# Monitor bridging activity
 bridge_events = audit.query(action=AuditAction.MESSAGE_BRIDGED, limit=100)
 
-# Get action frequency / 获取动作频率
+# Get action frequency
 stats = audit.stats()
 # {"auth_success": 500, "authz_granted": 1200, "message_bridged": 300, ...}
 ```
 
-### Session Monitoring / 会话监控
+### Session Monitoring
 
 ```python
 from gaiaagent.bus.session import SessionManager
 
 sessions = SessionManager()
 
-# Active sessions / 活跃会话
+# Active sessions
 active = sessions.get_active_sessions()
 print(f"Active: {sessions.active_count}/{sessions.session_count}")
 
-# Cleanup stale sessions / 清理陈旧会话
+# Cleanup stale sessions
 removed = sessions.cleanup_stale(max_age_seconds=3600)
 print(f"Removed {removed} stale sessions")
 ```
 
-### State Change Monitoring / 状态变化监控
+### State Change Monitoring
 
 ```python
-# Add listener for state changes / 添加状态变化监听器
+# Add listener for state changes
 state_events = []
 
 def on_state_change(agent_id, old_state, new_state):
@@ -574,25 +559,25 @@ def on_state_change(agent_id, old_state, new_state):
     }
     state_events.append(event)
 
-    # Alert on failures / 故障告警
+    # Alert on failures
     if new_state.value == "failed":
         send_alert(f"Agent {agent_id} has FAILED")
 
 harness.add_listener(on_state_change)
 ```
 
-### Logging Configuration / 日志配置
+### Logging Configuration
 
 ```python
 import logging
 
-# Configure logging for AURC / 为 AURC 配置日志
+# Configure logging for AURC
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 
-# Set specific log levels / 设置特定日志级别
+# Set specific log levels
 logging.getLogger("gaiaagent.harness").setLevel(logging.DEBUG)
 logging.getLogger("gaiaagent.bus.router").setLevel(logging.INFO)
 logging.getLogger("gaiaagent.security").setLevel(logging.WARNING)
@@ -600,16 +585,16 @@ logging.getLogger("gaiaagent.security").setLevel(logging.WARNING)
 
 ---
 
-## Production Checklist / 生产清单
+## Production Checklist
 
-### Pre-Deployment / 部署前
+### Pre-Deployment
 
-- [ ] **Agent descriptors validated** / Agent 描述文档已验证
+- [ ] **Agent descriptors validated**
   ```python
   from gaiaagent.core.identity import AgentDescriptor, AURCId
   AURCId.parse("aurc:prod/my-agent:v1.0")  # Validates format
   ```
-- [ ] **Recovery policy configured** / 恢复策略已配置
+- [ ] **Recovery policy configured**
   ```python
   from gaiaagent.core.types import RecoveryPolicy, RecoveryStrategy, RecoveryAction
   policy = RecoveryPolicy(
@@ -623,47 +608,47 @@ logging.getLogger("gaiaagent.security").setLevel(logging.WARNING)
   )
   harness = RuntimeHarness(recovery_policy=policy)
   ```
-- [ ] **Resource limits set** / 资源限制已设置
-- [ ] **Security policies defined** / 安全策略已定义
-- [ ] **Audit logging enabled** / 审计日志已启用
-- [ ] **API keys / JWT secrets configured** / API Key / JWT 密钥已配置
+- [ ] **Resource limits set**
+- [ ] **Security policies defined**
+- [ ] **Audit logging enabled**
+- [ ] **API keys / JWT secrets configured**
 
-### Security / 安全
+### Security
 
-- [ ] **Authentication enabled** (API Key or JWT) / 认证已启用
-- [ ] **Authorization policies set** (CapABAC) / 授权策略已设置
-- [ ] **Delegation chain validation enabled** / 委托链验证已启用
-- [ ] **Rate limits configured** / 速率限制已配置
-- [ ] **TLS termination configured** (if HTTP) / TLS 终端已配置
-- [ ] **Audit log export scheduled** / 审计日志导出已安排
+- [ ] **Authentication enabled** (API Key or JWT)
+- [ ] **Authorization policies set** (CapABAC)
+- [ ] **Delegation chain validation enabled**
+- [ ] **Rate limits configured**
+- [ ] **TLS termination configured** (if HTTP)
+- [ ] **Audit log export scheduled**
 
-### Reliability / 可靠性
+### Reliability
 
-- [ ] **Health checks passing** / 健康检查通过
-- [ ] **Error recovery tested** / 错误恢复已测试
-- [ ] **Graceful shutdown tested** / 优雅关闭已测试
+- [ ] **Health checks passing**
+- [ ] **Error recovery tested**
+- [ ] **Graceful shutdown tested**
   ```python
   await harness.shutdown(graceful=True)
   ```
-- [ ] **Session cleanup configured** / 会话清理已配置
-- [ ] **Dead letter queue monitored** / 死信队列已监控
+- [ ] **Session cleanup configured**
+- [ ] **Dead letter queue monitored**
 
-### Observability / 可观测性
+### Observability
 
-- [ ] **Router stats being collected** / 路由器统计正在收集
-- [ ] **State change listeners configured** / 状态变化监听器已配置
-- [ ] **Audit log being exported** / 审计日志正在导出
-- [ ] **Log levels appropriate** / 日志级别适当
-- [ ] **Alerting configured** (for agent failures) / 告警已配置
+- [ ] **Router stats being collected**
+- [ ] **State change listeners configured**
+- [ ] **Audit log being exported**
+- [ ] **Log levels appropriate**
+- [ ] **Alerting configured** (for agent failures)
 
-### Performance / 性能
+### Performance
 
-- [ ] **Max concurrency appropriate for hardware** / 最大并发适合硬件
-- [ ] **Message TTL configured** / 消息 TTL 已配置
-- [ ] **Session max count configured** / 会话最大数量已配置
-- [ ] **Context store cleanup scheduled** / 上下文存储清理已安排
+- [ ] **Max concurrency appropriate for hardware**
+- [ ] **Message TTL configured**
+- [ ] **Session max count configured**
+- [ ] **Context store cleanup scheduled**
 
-### Example Production Entry Point / 生产入口点示例
+### Example Production Entry Point
 
 ```python
 import asyncio
@@ -681,7 +666,7 @@ from gaiaagent.core.types import RecoveryPolicy, RecoveryStrategy, RecoveryActio
 logging.basicConfig(level=logging.INFO)
 
 async def main():
-    # 1. Create harness with recovery policy / 创建含恢复策略的 Harness
+    # 1. Create harness with recovery policy
     harness = RuntimeHarness(
         recovery_policy=RecoveryPolicy(
             max_retries=3,
@@ -693,23 +678,23 @@ async def main():
         )
     )
 
-    # 2. Setup message router / 设置消息路由器
+    # 2. Setup message router
     router = MessageRouter()
 
-    # 3. Register bridges / 注册桥接器
+    # 3. Register bridges
     bridge_registry = BridgeRegistry()
     bridge_registry.register(MCPBridge())
     bridge_registry.register(A2ABridge())
 
-    # 4. Setup security / 设置安全
+    # 4. Setup security
     auth = APIKeyAuthenticator()
     authz = AuthorizationEngine()
     audit = AuditLog(max_entries=50000)
 
-    # 5. Register agents / 注册 Agent
-    # (Register your agents here / 在此注册你的 Agent)
+    # 5. Register agents
+    # (Register your agents here)
 
-    # 6. Start HTTP transport / 启动 HTTP 传输
+    # 6. Start HTTP transport
     server = HTTPTransportServer(host="0.0.0.0", port=8080)
     server.set_handler(handle_message)
 
@@ -721,4 +706,4 @@ asyncio.run(main())
 
 ---
 
-*See also / 另请参阅: [Architecture Deep Dive](../architecture.md) | [Security Guide](security.md) | [API Reference](../api-reference.md)*
+*See also: [Architecture Deep Dive](../architecture.md) | [Security Guide](security.md) | [API Reference](../api-reference.md)*

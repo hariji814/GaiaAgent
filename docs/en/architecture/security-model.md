@@ -1,8 +1,9 @@
-# Security Model Deep Dive / 安全模型详解
+# Security Model Deep Dive
 
-> **[← Back to README](../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../PROTOCOL.md) | [API Reference](../api-reference.md)
+> 🌐 [中文版](../../zh/architecture/security-model.md)
+> **[← Back to README](../../../README.md)** | [Architecture](../architecture.md) | [Protocol Spec](../../../PROTOCOL.md) | [API Reference](../api-reference.md)
 
-## Threat Model / 威胁模型
+## Threat Model
 
 AURC addresses these threats in multi-agent systems:
 
@@ -15,7 +16,7 @@ AURC addresses these threats in multi-agent systems:
 | **Audit Evasion** | Malicious actions go unrecorded | Immutable append-only audit log |
 | **Protocol Bypass** | Security rules bypassed via bridge | Bridge-level permission enforcement |
 
-## CapABAC Model / CapABAC 模型
+## CapABAC Model
 
 CapABAC = **Cap**ability-Based + **A**ttribute-**B**ased **A**ccess **C**ontrol
 
@@ -37,7 +38,7 @@ CapABAC = **Cap**ability-Based + **A**ttribute-**B**ased **A**ccess **C**ontrol
 └─────────────────────────────────────────────────┘
 ```
 
-### Constraint Operators / 约束运算符
+### Constraint Operators
 
 | Operator | Example | Description |
 |----------|---------|-------------|
@@ -49,7 +50,7 @@ CapABAC = **Cap**ability-Based + **A**ttribute-**B**ased **A**ccess **C**ontrol
 | `matches` | `Constraint("domain", "matches", r".*\.edu$")` | Regex |
 | `contains` | `Constraint("tags", "contains", "verified")` | Substring |
 
-## Delegation Chain Rules / 委托链规则
+## Delegation Chain Rules
 
 ```
 Rule 1: Scopes ONLY narrow, never widen
@@ -69,26 +70,26 @@ Rule 4: Depth limit enforced
   max_depth=3, chain has 5 hops        ✗ REJECTED
 ```
 
-## Authentication Methods / 认证方法
+## Authentication Methods
 
 ```python
 from gaiaagent.security import MultiAuthenticator
 
 auth = MultiAuthenticator()
 
-# API Key (dev/internal) / API Key（开发/内部）
+# API Key (dev/internal)
 api = auth.add_api_key()
 key = api.create_key("aurc:my/agent:v1.0", scopes=["read", "write"])
 
-# JWT (cross-org) / JWT（跨组织）
+# JWT (cross-org)
 jwt = auth.add_jwt(secret="your-secret")
 token = jwt.create_token("aurc:my/agent:v1.0", scopes=["read"])
 
-# Authenticate / 认证
+# Authenticate
 result = auth.authenticate_any({"api_key": key, "jwt": token})
 ```
 
-## Audit Trail / 审计追踪
+## Audit Trail
 
 Every security-relevant event is recorded:
 
@@ -101,9 +102,9 @@ audit.log(AuditAction.AUTHZ_DENIED,
           severity=AuditSeverity.WARNING,
           details={"resource": "database", "action": "write"})
 
-# Query / 查询
+# Query
 denied = audit.query(action=AuditAction.AUTHZ_DENIED)
 
-# Export for compliance / 合规导出
+# Export for compliance
 audit.export_to_file("audit-2026-06.json")
 ```

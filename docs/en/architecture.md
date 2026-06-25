@@ -1,45 +1,44 @@
-# Architecture Deep Dive / 架构深度解析
+# Architecture Deep Dive
 
-> **[← Back to README](../README.md)** | [Protocol Spec](../PROTOCOL.md) | [API Reference](api-reference.md) | [Quick Start](guides/quickstart.md)
+> 🌐 [中文版](../zh/architecture.md)
+> **[← Back to README](../../README.md)** | [Protocol Spec](../../PROTOCOL.md) | [API Reference](api-reference.md) | [Quick Start](guides/quickstart.md)
 >
 > A comprehensive guide to the AURC protocol architecture — the first complete 8-layer protocol stack for AI agent communication.
->
-> AURC 协议架构全面指南 — AI Agent 通信领域首个完整的 8 层协议栈。
 
 ---
 
-## Table of Contents / 目录
+## Table of Contents
 
-1. [Design Philosophy / 设计哲学](#design-philosophy--设计哲学)
-2. [Layered Architecture / 分层架构](#layered-architecture--分层架构)
-3. [L0: Transport Layer / 传输层](#l0-transport-layer--传输层)
-4. [L1: Agent Identity / Agent 身份](#l1-agent-identity--agent-身份)
-5. [L2: Runtime Harness / 运行时 Harness](#l2-runtime-harness--运行时-harness)
-6. [L3: Unified Message Bus / 统一消息总线](#l3-unified-message-bus--统一消息总线)
-7. [L4: Protocol Bridges / 协议桥接层](#l4-protocol-bridges--协议桥接层)
-8. [L5: Context Correlation / 上下文关联层](#l5-context-correlation--上下文关联层)
-9. [L6: Security Layer / 安全层](#l6-security-layer--安全层)
-10. [L7: Discovery Layer / 发现层](#l7-discovery-layer--发现层)
-11. [Data Flow Diagrams / 数据流图](#data-flow-diagrams--数据流图)
-12. [State Machine / 状态机详解](#state-machine--状态机详解)
-13. [Async Model / 异步模型](#async-model--异步模型)
-14. [Extension Points / 扩展点](#extension-points--扩展点)
+1. [Design Philosophy](#design-philosophy)
+2. [Layered Architecture](#layered-architecture)
+3. [L0: Transport Layer](#l0-transport-layer)
+4. [L1: Agent Identity](#l1-agent-identity)
+5. [L2: Runtime Harness](#l2-runtime-harness)
+6. [L3: Unified Message Bus](#l3-unified-message-bus)
+7. [L4: Protocol Bridges](#l4-protocol-bridges)
+8. [L5: Context Correlation](#l5-context-correlation)
+9. [L6: Security Layer](#l6-security-layer)
+10. [L7: Discovery Layer](#l7-discovery-layer)
+11. [Data Flow Diagrams](#data-flow-diagrams)
+12. [State Machine](#state-machine)
+13. [Async Model](#async-model)
+14. [Extension Points](#extension-points)
 
 ---
 
-## Design Philosophy / 设计哲学
+## Design Philosophy
 
-AURC is built on five core design principles / AURC 基于五大核心设计原则:
+AURC is built on five core design principles:
 
-| # | Principle / 原则 | Rationale / 理由 |
+| # | Principle | Rationale |
 |---|---|---|
-| 1 | **Bridge First** / 桥接优先 | Don't reinvent communication primitives; unify existing protocols / 不重新发明通信原语，统一现有协议 |
-| 2 | **Runtime is King** / 运行时为核心 | Agent = Model + Harness; the Harness is a first-class citizen / Agent = 模型 + Harness；Harness 是一等公民 |
-| 3 | **Progressive Complexity** / 渐进复杂度 | Simple core, enterprise features as optional modules / 简单核心，企业功能作为可选模块 |
-| 4 | **Protocol-Agnostic Identity** / 协议无关身份 | One agent, one identity across all protocols / 一个 Agent，跨所有协议的统一身份 |
-| 5 | **Security by Default** / 安全第一 | Permissions enforceable at the protocol level / 权限可在协议层面强制执行 |
+| 1 | **Bridge First** | Don't reinvent communication primitives; unify existing protocols |
+| 2 | **Runtime is King** | Agent = Model + Harness; the Harness is a first-class citizen |
+| 3 | **Progressive Complexity** | Simple core, enterprise features as optional modules |
+| 4 | **Protocol-Agnostic Identity** | One agent, one identity across all protocols |
+| 5 | **Security by Default** | Permissions enforceable at the protocol level |
 
-### Why AURC Exists / AURC 为什么存在
+### Why AURC Exists
 
 The 2025–2026 AI agent ecosystem produced several protocols, each solving a narrow layer:
 
@@ -47,64 +46,59 @@ The 2025–2026 AI agent ecosystem produced several protocols, each solving a na
 - **A2A** (Google): Agent-to-Agent delegation
 - **ACP** (IBM): Lightweight REST messaging
 
-**Problem / 问题:** No single solution bridges these protocols or provides agent lifecycle management. An agent using MCP for tools cannot seamlessly delegate to an A2A agent, and neither protocol manages agent state, error recovery, or context persistence.
+**Problem:** No single solution bridges these protocols or provides agent lifecycle management. An agent using MCP for tools cannot seamlessly delegate to an A2A agent, and neither protocol manages agent state, error recovery, or context persistence.
 
 **AURC solves this** by layering on top — not replacing — existing protocols, adding runtime lifecycle, security, and cross-protocol context tracking.
 
 ---
 
-## Layered Architecture / 分层架构
+## Layered Architecture
 
 AURC uses an 8-layer model (L0–L7). Each layer is independently testable and replaceable.
 
-AURC 使用 8 层模型 (L0–L7)。每一层都可以独立测试和替换。
-
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ L7  Discovery / 发现层                                               │
+│ L7  Discovery                                                        │
 │     LocalRegistry, capability matching, health-based routing         │
-│     Agent 注册中心、能力匹配、健康路由                                    │
 ├──────────────────────────────────────────────────────────────────────┤
-│ L6  Security / 安全层                                                │
+│ L6  Security                                                         │
 │     APIKeyAuthenticator, JWTAuthenticator, AuthorizationEngine       │
 │     DelegationValidator, AuditLog                                    │
-│     API Key / JWT 认证、CapABAC 授权引擎、委托链验证、审计日志            │
 ├──────────────────────────────────────────────────────────────────────┤
-│ L5  Context Correlation / 上下文关联层                                 │
+│ L5  Context Correlation                                              │
 │     ContextStore (session/agent/shared/global scopes)                │
 │     correlation_id, bridge_chain tracking                            │
-│     多作用域上下文存储、关联 ID、桥接链追踪                                │
 ├──────────────────────────────────────────────────────────────────────┤
-│ L4  Protocol Bridges / 协议桥接层                                     │
+│ L4  Protocol Bridges                                                 │
 │     MCPBridge  — MCP JSON-RPC ↔ AURC                                │
 │     A2ABridge  — A2A tasks/send ↔ AURC                              │
 │     ACPBridge  — ACP REST envelope ↔ AURC                           │
-│     BridgeRegistry — manages all bridges / 管理所有桥接器              │
+│     BridgeRegistry — manages all bridges                            │
 ├──────────────────────────────────────────────────────────────────────┤
-│ L3  Unified Message Bus / 统一消息总线                                │
-│     AURCMessage (canonical format) / 标准消息格式                     │
+│ L3  Unified Message Bus                                              │
+│     AURCMessage (canonical format)                                  │
 │     MessageRouter (direct/bridge/broadcast/dead-letter)              │
-│     SessionManager (conversation tracking) / 会话管理                 │
+│     SessionManager (conversation tracking)                          │
 ├──────────────────────────────────────────────────────────────────────┤
-│ L2  Runtime Harness / 运行时 Harness                                 │
-│     RuntimeHarness (lifecycle state machine) / 生命周期状态机          │
-│     AgentInstance (per-agent state wrapper) / Agent 状态包装          │
-│     RecoveryPolicy (error recovery strategies) / 错误恢复策略          │
-│     ContextStore (multi-scope memory) / 多作用域内存                  │
+│ L2  Runtime Harness                                                  │
+│     RuntimeHarness (lifecycle state machine)                        │
+│     AgentInstance (per-agent state wrapper)                         │
+│     RecoveryPolicy (error recovery strategies)                      │
+│     ContextStore (multi-scope memory)                               │
 ├──────────────────────────────────────────────────────────────────────┤
-│ L1  Agent Identity / Agent 身份                                      │
-│     AURCId (URN-format ID parsing) / URN 格式 ID 解析                │
-│     AgentDescriptor (identity document) / 身份描述文档                │
-│     Capabilities, ProtocolSupport, AuthDeclaration                   │
+│ L1  Agent Identity                                                   │
+│     AURCId (URN-format ID parsing)                                  │
+│     AgentDescriptor (identity document)                             │
+│     Capabilities, ProtocolSupport, AuthDeclaration                  │
 ├──────────────────────────────────────────────────────────────────────┤
-│ L0  Transport / 传输层                                               │
+│ L0  Transport                                                        │
 │     HTTPTransportServer / HTTPTransportClient (HTTP/2 + ASGI)       │
 │     WebSocketTransportServer / WebSocketTransportClient             │
-│     stdio (local development) / 标准输入输出（本地开发）                │
+│     stdio (local development)                                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Layer Dependency Rule / 层依赖规则
+### Layer Dependency Rule
 
 Each layer may only depend on layers below it. This ensures clean separation:
 
@@ -114,22 +108,20 @@ Each layer may only depend on layers below it. This ensures clean separation:
 
 ---
 
-## L0: Transport Layer / 传输层
+## L0: Transport Layer
 
 The transport layer handles raw message delivery over the network.
 
-传输层负责通过网络传递原始消息。
+### Supported Transports
 
-### Supported Transports / 支持的传输方式
-
-| Transport | Use Case / 用例 | Status / 状态 |
+| Transport | Use Case | Status |
 |-----------|----------|--------|
-| HTTP/2 (ASGI + uvicorn) | Production, cross-network / 生产环境 | Implemented |
-| WebSocket | Real-time bidirectional / 实时双向 | Implemented |
-| stdio | Local dev, CLI tools / 本地开发 | Interface only |
-| gRPC | High-performance internal / 高性能内部 | Planned |
+| HTTP/2 (ASGI + uvicorn) | Production, cross-network | Implemented |
+| WebSocket | Real-time bidirectional | Implemented |
+| stdio | Local dev, CLI tools | Interface only |
+| gRPC | High-performance internal | Planned |
 
-### HTTP Transport Architecture / HTTP 传输架构
+### HTTP Transport Architecture
 
 ```
 ┌─────────────────┐     HTTP POST /aurc      ┌─────────────────┐
@@ -146,34 +138,32 @@ The transport layer handles raw message delivery over the network.
                                                  └─────────────┘
 ```
 
-**Endpoints / 端点:**
-- `POST /aurc` — Send an AURC message / 发送 AURC 消息
-- `GET /health` — Health check / 健康检查
+**Endpoints:**
+- `POST /aurc` — Send an AURC message
+- `GET /health` — Health check
 
 ---
 
-## L1: Agent Identity / Agent 身份
+## L1: Agent Identity
 
 The identity layer provides globally unique, human-readable agent identification.
 
-身份层提供全局唯一、人类可读的 Agent 标识。
-
-### AURC ID Format / AURC ID 格式
+### AURC ID Format
 
 ```
 aurc:{namespace}/{agent_name}:{version}
 
-Examples / 示例:
+Examples:
   aurc:gaia/researcher:v1.2
   aurc:mycompany/code-reviewer:v2.0
   aurc:community/translator:v1.0
 ```
 
-**Design rationale / 设计理由:**
-- URN-style is simpler than DID (no blockchain dependency) / URN 风格比 DID 更简单
-- Namespace provides decentralized uniqueness (like Docker Hub) / 命名空间提供去中心化唯一性
-- Version pinning ensures reproducibility / 版本固定确保可复现性
-- Glob-like pattern matching for routing / 支持通配符匹配用于路由
+**Design rationale:**
+- URN-style is simpler than DID (no blockchain dependency)
+- Namespace provides decentralized uniqueness (like Docker Hub)
+- Version pinning ensures reproducibility
+- Glob-like pattern matching for routing
 
 **Key class: `AURCId`** — parses and validates the format with regex, supports glob matching via `matches()`:
 
@@ -185,15 +175,15 @@ print(aurc_id.version)    # "v1.2"
 aurc_id.matches("aurc:gaia/*")  # True
 ```
 
-### Agent Descriptor / Agent 描述文档
+### Agent Descriptor
 
 The `AgentDescriptor` is the identity document — the single source of truth for:
 
-1. **Who** the agent is (identity) / Agent 是谁（身份）
-2. **What** it can do (capabilities/skills) / 能做什么（能力/技能）
-3. **How** to communicate (protocols) / 如何通信（协议）
-4. **What** it needs (runtime requirements) / 需要什么（运行时需求）
-5. **How** to authenticate (security) / 如何认证（安全）
+1. **Who** the agent is (identity)
+2. **What** it can do (capabilities/skills)
+3. **How** to communicate (protocols)
+4. **What** it needs (runtime requirements)
+5. **How** to authenticate (security)
 
 ```
 ┌─────────────────────────────────────────┐
@@ -224,13 +214,11 @@ The `AgentDescriptor` is the identity document — the single source of truth fo
 
 ---
 
-## L2: Runtime Harness / 运行时 Harness
+## L2: Runtime Harness
 
 This is the **core innovation** of AURC — neither MCP, A2A, nor ACP provides agent lifecycle management.
 
-这是 AURC 的**核心创新** — MCP、A2A 和 ACP 都不提供 Agent 生命周期管理。
-
-### Components / 组件
+### Components
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -242,7 +230,7 @@ This is the **core innovation** of AURC — neither MCP, A2A, nor ACP provides a
 │  _resource_limits: ResourceLimits                          │
 │                                                            │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ AgentInstance (per agent) / 每个 Agent 的实例         │  │
+│  │ AgentInstance (per agent)                             │  │
 │  │  - descriptor: AgentDescriptor                       │  │
 │  │  - state: AgentState (current)                       │  │
 │  │  - _state_history: [(state, timestamp), ...]         │  │
@@ -253,7 +241,7 @@ This is the **core innovation** of AURC — neither MCP, A2A, nor ACP provides a
 └────────────────────────────────────────────────────────────┘
 ```
 
-### Error Recovery / 错误恢复
+### Error Recovery
 
 ```
 Error occurs → FAILING state → check RecoveryPolicy
@@ -272,13 +260,11 @@ Error occurs → FAILING state → check RecoveryPolicy
 
 ---
 
-## L3: Unified Message Bus / 统一消息总线
+## L3: Unified Message Bus
 
 The message bus is the central nervous system of AURC. Every communication flows through it as `AURCMessage`.
 
-消息总线是 AURC 的中枢神经系统。所有通信都以 `AURCMessage` 流经它。
-
-### AURCMessage Structure / AURCMessage 结构
+### AURCMessage Structure
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -306,7 +292,7 @@ The message bus is the central nervous system of AURC. Every communication flows
 └──────────────────────────────────────────────────────────┘
 ```
 
-### MessageRouter Flow / MessageRouter 流程
+### MessageRouter Flow
 
 ```
 AURCMessage arrives
@@ -329,13 +315,11 @@ AURCMessage arrives
 
 ---
 
-## L4: Protocol Bridges / 协议桥接层
+## L4: Protocol Bridges
 
 Bridges are the key interoperability mechanism. They translate between AURC's canonical `AURCMessage` format and external protocols.
 
-桥接器是关键互操作机制。它们在 AURC 的标准 `AURCMessage` 格式和外部协议之间进行翻译。
-
-### Bridge Interface / 桥接器接口
+### Bridge Interface
 
 Every bridge must implement the `ProtocolBridge` protocol:
 
@@ -348,7 +332,7 @@ class ProtocolBridge(Protocol):
     async def map_capabilities(caps) -> list[AURCCapability]
 ```
 
-### MCP Bridge Mapping / MCP 桥接映射
+### MCP Bridge Mapping
 
 ```
 MCP JSON-RPC              AURC Message
@@ -364,7 +348,7 @@ AURC notification ──→      notifications/{event}
 AURC stream       ──→      notifications/stream
 ```
 
-### A2A Bridge Mapping / A2A 桥接映射
+### A2A Bridge Mapping
 
 ```
 A2A JSON-RPC              AURC Message
@@ -380,7 +364,7 @@ AURC stream        ──→     SSE events (status-update/artifact-update)
 AURC notification  ──→     Task state change
 ```
 
-### BridgeRegistry / 桥接器注册中心
+### BridgeRegistry
 
 ```python
 registry = BridgeRegistry()
@@ -393,13 +377,11 @@ bridge = registry.find_bridge("a2a/1.0", "aurc/0.1")
 
 ---
 
-## L5: Context Correlation / 上下文关联层
+## L5: Context Correlation
 
 This layer tracks context across protocol boundaries and manages agent memory.
 
-此层追踪跨协议边界的上下文并管理 Agent 内存。
-
-### Cross-Protocol Tracking / 跨协议追踪
+### Cross-Protocol Tracking
 
 Every message carries `correlation_id` and `bridge_chain`:
 
@@ -419,24 +401,24 @@ MCP Web Search Server
   bridge_chain: ["a2a→aurc", "aurc→mcp"]
 ```
 
-### Context Scopes / 上下文作用域
+### Context Scopes
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ Global Scope (全局)                                   │
-│  Lifetime: Harness runtime / Harness 运行期间         │
+│ Global Scope                                           │
+│  Lifetime: Harness runtime                             │
 │  Visibility: All agents (permission-gated)            │
 │  ┌────────────────────────────────────────────────┐  │
-│  │ Shared Scope (共享)                             │  │
-│  │  Lifetime: Cross-agent / 跨 Agent               │  │
-│  │  Visibility: Authorized groups / 授权组          │  │
+│  │ Shared Scope                                    │  │
+│  │  Lifetime: Cross-agent                           │  │
+│  │  Visibility: Authorized groups                   │  │
 │  │  ┌─────────────────────────────────────────┐   │  │
-│  │  │ Agent Scope (Agent)                      │   │  │
-│  │  │  Lifetime: Agent lifetime / Agent 存续期 │   │  │
+│  │  │ Agent Scope                              │   │  │
+│  │  │  Lifetime: Agent lifetime                 │   │  │
 │  │  │  Visibility: Current agent only          │   │  │
 │  │  │  ┌───────────────────────────────────┐  │   │  │
-│  │  │  │ Session Scope (会话)               │  │   │  │
-│  │  │  │  Lifetime: Single task / 单次任务  │  │   │  │
+│  │  │  │ Session Scope                      │  │   │  │
+│  │  │  │  Lifetime: Single task             │  │   │  │
 │  │  │  │  Visibility: Current agent only    │  │   │  │
 │  │  │  └───────────────────────────────────┘  │   │  │
 │  │  └─────────────────────────────────────────┘   │  │
@@ -446,19 +428,16 @@ MCP Web Search Server
 
 ---
 
-## L6: Security Layer / 安全层
+## L6: Security Layer
 
 AURC implements CapABAC — a hybrid of Capability-Based Security and Attribute-Based Access Control.
 
-AURC 实现 CapABAC — 能力安全与属性访问控制的混合模型。
-
 ```
 ┌──────────────────────────────────────────────────────┐
-│ Security Layer / 安全层                               │
+│ Security Layer                                         │
 │                                                      │
 │  ┌────────────────┐  ┌──────────────────────────┐    │
 │  │ Authentication │  │ Authorization             │    │
-│  │ 认证           │  │ 授权                       │    │
 │  │                │  │                            │    │
 │  │ APIKeyAuth..   │  │ AuthorizationEngine        │    │
 │  │ JWTAuthent..   │  │  (CapABAC)                 │    │
@@ -466,7 +445,6 @@ AURC 实现 CapABAC — 能力安全与属性访问控制的混合模型。
 │  └────────────────┘  └──────────────────────────┘    │
 │  ┌────────────────┐  ┌──────────────────────────┐    │
 │  │ Delegation     │  │ Audit                     │    │
-│  │ 委托           │  │ 审计                       │    │
 │  │                │  │                            │    │
 │  │ DelegationVal. │  │ AuditLog                   │    │
 │  │ DelegationBui. │  │  (append-only, queryable)  │    │
@@ -474,36 +452,36 @@ AURC 实现 CapABAC — 能力安全与属性访问控制的混合模型。
 └──────────────────────────────────────────────────────┘
 ```
 
-**Permission Rules / 权限规则:**
-1. **Scopes only narrow, never widen** / 权限只缩小不扩大
-2. **Cross-bridge = intersection** / 跨桥接 = 交集
-3. **Chain is auditable** / 链可审计
+**Permission Rules:**
+1. **Scopes only narrow, never widen**
+2. **Cross-bridge = intersection**
+3. **Chain is auditable**
 
 ---
 
-## L7: Discovery Layer / 发现层
+## L7: Discovery Layer
 
 ```python
 registry = LocalRegistry()
 
-# Find by skills / 按技能查找
+# Find by skills
 matches = registry.find_by_skills(["web-search", "summarize"])
 
-# Find by tag / 按标签查找
+# Find by tag
 researchers = registry.find_by_tag("research")
 
-# Find by protocol / 按协议查找
+# Find by protocol
 mcp_agents = registry.find_by_protocol("mcp/2025-06-18")
 
-# Find best match / 查找最佳匹配
+# Find best match
 best = registry.find_best(["deep-research"])
 ```
 
 ---
 
-## Data Flow Diagrams / 数据流图
+## Data Flow Diagrams
 
-### Scenario 1: AURC Agent Calls MCP Tool / AURC Agent 调用 MCP 工具
+### Scenario 1: AURC Agent Calls MCP Tool
 
 ```
 ┌────────────┐     AURCMessage       ┌────────────┐    MCP JSON-RPC    ┌────────────┐
@@ -516,7 +494,7 @@ best = registry.find_best(["deep-research"])
 └────────────┘                       └────────────┘                   └────────────┘
 ```
 
-### Scenario 2: Multi-Protocol Workflow / 多协议工作流
+### Scenario 2: Multi-Protocol Workflow
 
 ```
 User Request
@@ -537,7 +515,7 @@ User Request
 Aggregated Result → User
 ```
 
-### Scenario 3: Delegation Chain Flow / 委托链流程
+### Scenario 3: Delegation Chain Flow
 
 ```
 User (Alice)
@@ -558,23 +536,23 @@ MCP Web Search Server
 
 ---
 
-## State Machine / 状态机详解
+## State Machine
 
-### 9 States / 9 个状态
+### 9 States
 
-| State / 状态 | Enum Value | Terminal? | Active? | Description / 描述 |
+| State | Enum Value | Terminal? | Active? | Description |
 |-------|------------|:---------:|:-------:|-------------|
-| `REGISTERING` | `"registering"` | No | No | Agent registering descriptor / 正在注册 |
-| `READY` | `"ready"` | No | No | Waiting for tasks / 等待任务 |
-| `RUNNING` | `"running"` | No | Yes | Actively executing / 正在执行 |
-| `PAUSED` | `"paused"` | No | No | Paused (HITL, resource wait) / 暂停 |
-| `FAILING` | `"failing"` | No | Yes | Error, recovery pending / 出错 |
-| `RECOVERING` | `"recovering"` | No | Yes | Recovery in progress / 恢复中 |
-| `COMPLETED` | `"completed"` | **Yes** | No | Success / 成功完成 |
-| `FAILED` | `"failed"` | **Yes** | No | Unrecoverable / 不可恢复 |
-| `STOPPED` | `"stopped"` | **Yes** | No | Externally stopped / 外部停止 |
+| `REGISTERING` | `"registering"` | No | No | Agent registering descriptor |
+| `READY` | `"ready"` | No | No | Waiting for tasks |
+| `RUNNING` | `"running"` | No | Yes | Actively executing |
+| `PAUSED` | `"paused"` | No | No | Paused (HITL, resource wait) |
+| `FAILING` | `"failing"` | No | Yes | Error, recovery pending |
+| `RECOVERING` | `"recovering"` | No | Yes | Recovery in progress |
+| `COMPLETED` | `"completed"` | **Yes** | No | Success |
+| `FAILED` | `"failed"` | **Yes** | No | Unrecoverable |
+| `STOPPED` | `"stopped"` | **Yes** | No | Externally stopped |
 
-### Valid Transitions / 合法转换
+### Valid Transitions
 
 ```
 REGISTERING ──→ READY, FAILED
@@ -583,12 +561,12 @@ RUNNING     ──→ PAUSED, FAILING, COMPLETED, STOPPED
 PAUSED      ──→ RUNNING, STOPPED, READY
 FAILING     ──→ RECOVERING, FAILED, STOPPED
 RECOVERING  ──→ READY, FAILED
-COMPLETED   ──→ (terminal / 终态)
-FAILED      ──→ (terminal / 终态)
-STOPPED     ──→ (terminal / 终态)
+COMPLETED   ──→ (terminal)
+FAILED      ──→ (terminal)
+STOPPED     ──→ (terminal)
 ```
 
-### State Transition Diagram / 状态转换图
+### State Transition Diagram
 
 ```
                     ┌──────────────────────────────────┐
@@ -619,13 +597,11 @@ Any invalid transition raises `StateTransitionError`.
 
 ---
 
-## Async Model / 异步模型
+## Async Model
 
 AURC is built entirely on Python's `asyncio`.
 
-AURC 完全基于 Python 的 `asyncio` 构建。
-
-**Key patterns / 关键模式:**
+**Key patterns:**
 
 - All lifecycle methods (`register`, `start`, `pause`, `resume`, `stop`) are `async`
 - Message routing via `await router.route(message)`
@@ -634,19 +610,19 @@ AURC 完全基于 Python 的 `asyncio` 构建。
 - Pause/resume uses `asyncio.Event` for non-blocking coordination
 
 ```python
-# Pause via event / 通过事件暂停
+# Pause via event
 instance._pause_event.clear()   # Agent pauses
 await instance._pause_event.wait()  # Blocks until resumed
 
-# Parallel fan-out / 并行扇出
+# Parallel fan-out
 results = await asyncio.gather(*task_coros, return_exceptions=True)
 ```
 
 ---
 
-## Extension Points / 扩展点
+## Extension Points
 
-### Custom Bridge / 自定义桥接器
+### Custom Bridge
 
 ```python
 class MyCustomBridge:
@@ -667,12 +643,12 @@ class MyCustomBridge:
     async def map_capabilities(self, caps: list[dict]) -> list[dict]:
         ...
 
-# Register / 注册
+# Register
 registry = BridgeRegistry()
 registry.register(MyCustomBridge())
 ```
 
-### Custom Recovery Strategy / 自定义恢复策略
+### Custom Recovery Strategy
 
 ```python
 policy = RecoveryPolicy(
@@ -688,7 +664,7 @@ policy = RecoveryPolicy(
 harness = RuntimeHarness(recovery_policy=policy)
 ```
 
-### State Change Listeners / 状态变化监听器
+### State Change Listeners
 
 ```python
 def on_state_change(agent_id: str, old_state: AgentState, new_state: AgentState):
@@ -699,4 +675,4 @@ harness.add_listener(on_state_change)
 
 ---
 
-*See also / 另请参阅: [Bridge Integration Guide](guides/bridges.md) | [Security Guide](guides/security.md) | [API Reference](api-reference.md)*
+*See also: [Bridge Integration Guide](guides/bridges.md) | [Security Guide](guides/security.md) | [API Reference](api-reference.md)*
