@@ -223,6 +223,14 @@ class ClaudeLLM:
         timeout: float | None = None,
         trace_recorder: Any = None,
         agent_id: str | None = None,
+        backend: str = "claude",
+        codex_cli_path: str | None = None,
+        codex_cli_args: list[str] | None = None,
+        codex_sandbox: str | None = None,
+        codex_working_dir: str | None = None,
+        codex_mcp_config: list[Any] | None = None,
+        codex_extra_config: list[str] | None = None,
+        codex_output_last_message: str | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
@@ -242,6 +250,20 @@ class ClaudeLLM:
         self._timeout = timeout
         self._trace_recorder = trace_recorder
         self._agent_id = agent_id
+        # Pluggable loop backend (Loop Roadmap: vendor-lock to Claude is a non-goal).
+        # backend selects which CLI drives the inner agentic loop: "claude" (default),
+        # "codex", or "auto" (prefer the first CLI on PATH). The codex backend mirrors
+        # the claude adapter shape (gaiaagent.integrations.codex_cli); both reduce a
+        # vendor CLI stream into one ClaudeResponse.
+        self._backend = backend
+        # Codex-specific config; only consulted when the codex backend runs.
+        self._codex_cli_path = codex_cli_path
+        self._codex_cli_args = codex_cli_args
+        self._codex_sandbox = codex_sandbox
+        self._codex_working_dir = codex_working_dir
+        self._codex_mcp_config = codex_mcp_config
+        self._codex_extra_config = codex_extra_config
+        self._codex_output_last_message = codex_output_last_message
 
     async def ask(
         self,
@@ -335,15 +357,58 @@ class ClaudeLLM:
         Returns:
             Final ClaudeResponse after all tool calls complete
         """
-        from .claude_cli import cli_available, prompt_too_long, run_agentic_loop
+        # Backend selection (Loop Roadmap: vendor-lock to Claude is a non-goal).
+        # Both CLI backends (claude, codex) reduce a vendor CLI stream into one
+        # ClaudeResponse; the codex backend mirrors the claude adapter shape.
+        from . import claude_cli as _claude_cli
+        from . import codex_cli as _codex_cli
 
         has_handler_tools = bool(tools) and any(
             getattr(t, "handler", None) is not None for t in (tools or [])
         )
         # A prompt too long for a CLI *argument* forces the in-process loop
         # (avoids Windows command-line truncation; long prompts should use MCP).
-        if cli_available(self._cli_path) and not has_handler_tools and not prompt_too_long(prompt):
-            return await run_agentic_loop(
+        if has_handler_tools or _claude_cli.prompt_too_long(prompt):
+            if _claude_cli.prompt_too_long(prompt):
+                logger.info("prompt exceeds CLI arg limit; using built-in loop")
+            return await self._agentic_loop_builtin(
+                prompt=prompt, tools=tools, max_turns=max_turns, system=system
+            )
+
+        backend = (self._backend or "claude").lower()
+        if backend == "auto":
+            if _codex_cli.cli_available(self._codex_cli_path):
+                backend = "codex"
+            elif _claude_cli.cli_available(self._cli_path):
+                backend = "claude"
+            else:
+                backend = "builtin"
+
+        if backend == "codex" and _codex_cli.cli_available(self._codex_cli_path):
+            return await _codex_cli.run_agentic_loop(
+                prompt=prompt,
+                tools=tools,
+                max_turns=max_turns,
+                system=system or self._system_prompt,
+                model=self._model,
+                api_key=self._api_key,
+                max_tokens=self._max_tokens,
+                execute_tool=self._execute_tool,
+                cli_path=self._codex_cli_path,
+                cli_args=self._codex_cli_args,
+                sandbox=self._codex_sandbox,
+                working_dir=self._codex_working_dir,
+                mcp_config=self._codex_mcp_config,
+                extra_config=self._codex_extra_config,
+                output_last_message=self._codex_output_last_message,
+                timeout=self._timeout,
+                trace_recorder=self._trace_recorder,
+                agent_id=self._agent_id,
+                correlation_id=correlation_id,
+            )
+
+        if backend == "claude" and _claude_cli.cli_available(self._cli_path):
+            return await _claude_cli.run_agentic_loop(
                 prompt=prompt,
                 tools=tools,
                 max_turns=max_turns,
@@ -362,8 +427,7 @@ class ClaudeLLM:
                 agent_id=self._agent_id,
                 correlation_id=correlation_id,
             )
-        if prompt_too_long(prompt):
-            logger.info("prompt exceeds CLI arg limit; using built-in loop")
+
         return await self._agentic_loop_builtin(
             prompt=prompt, tools=tools, max_turns=max_turns, system=system
         )

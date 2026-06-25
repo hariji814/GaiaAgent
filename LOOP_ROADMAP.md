@@ -1,4 +1,4 @@
-# Loop Roadmap — GaiaAgent × Claude Code CLI
+# Loop Roadmap — GaiaAgent × CLI Agentic Loops
 
 > 🌐 [中文版](LOOP_ROADMAP.zh.md)
 > **[← Back to README](README.md)** | [Roadmap](ROADMAP.md) | [Protocol Spec](PROTOCOL.md)
@@ -11,9 +11,9 @@
 
 | | |
 |:---|:---|
-| **Current state** | ✅ **Shipped.** `ClaudeLLM.agentic_loop` delegates to the `claude` CLI (`claude -p --output-format stream-json`) when on PATH, with a safe subprocess wrapper (concurrent stdout/stderr drain, timeout, kill-on-cancel) and defensive stream-json parsing. Falls back to the built-in `anthropic`-based loop otherwise. ✅ **MCP server shipped** (`gaiaagent.mcp.server`) — exposes AURC `@skill` agents as MCP tools so CLI tool calls enter the bus at the protocol level. 299 tests passing. |
-| **Honest assessment** | The README claim "Claude-native" is now substantive for the *loop delegation* and *MCP exposure* of skills. **Not yet wired**: lifecycle (the harness does not drive `agentic_loop`), CapABAC gating of CLI tool calls, session/resume tied to `ContextStore`. The concept-mapping table marks each row's status. |
-| **Dependency status** | **No new Python dependency.** The `claude` CLI is an external runtime requirement, detected on PATH at runtime. `pyproject.toml`'s `claude` extra keeps `anthropic>=0.40` for the fallback path. |
+| **Current state** | ✅ **Shipped.** `ClaudeLLM.agentic_loop` delegates to the `claude` CLI (`claude -p --output-format stream-json`) when on PATH, with a safe subprocess wrapper (concurrent stdout/stderr drain, timeout, kill-on-cancel) and defensive stream-json parsing. Falls back to the built-in `anthropic`-based loop otherwise. ✅ **MCP server shipped** (`gaiaagent.mcp.server`) — exposes AURC `@skill` agents as MCP tools so CLI tool calls enter the bus at the protocol level. 322 tests passing. The `codex` CLI (`codex exec --json`) is now a second reference backend via the same adapter shape; the `backend` parameter (`claude` / `codex` / `auto`) makes the pluggable seam real, not aspirational. |
+| **Honest assessment** | The README claim "Claude-native" is now substantive for the *loop delegation* and *MCP exposure* of skills. **Now wired**: the `backend` parameter on `ClaudeLLM` makes the pluggable loop seam real — `claude` and `codex` CLI backends are interchangeable, `auto` picks the first on PATH. **Not yet wired**: lifecycle (the harness does not drive `agentic_loop`), CapABAC gating of CLI tool calls, session/resume tied to `ContextStore`. The concept-mapping table marks each row's status. |
+| **Dependency status** | **No new Python dependency.** The `claude` and `codex` CLIs are external runtime requirements, detected on PATH at runtime. `pyproject.toml`'s `claude` extra keeps `anthropic>=0.40` for the fallback path. |
 
 > This is a **living** document; status reflects the code at HEAD. The CLI's `stream-json` event schema is parsed defensively (`.get()` throughout, `isinstance` guards, empty-stream → error not silent success).
 
@@ -126,7 +126,7 @@ MCP server, calls an AURC `@skill` and receives its result; `correlation_id` +
 `bridge_chain` are set by the bridge and recorded by `BridgeTraceRecorder`.
 Covered by `tests/test_mcp_server.py`.
 
-### Step 2 — `claude` CLI as the Loop Engine  ✅
+### Step 2 — CLI as the Loop Engine  ✅
 
 `ClaudeLLM.agentic_loop` delegates to `claude -p … --output-format stream-json`
 when the CLI is on PATH and no caller-supplied Python tool handlers need to run
@@ -137,6 +137,20 @@ leaked `ANTHROPIC_API_KEY`). Defensive parsing: empty stream → `stop_reason="e
 (not silent success), `isinstance` guards, correct `stop_reason` precedence.
 `stop_reason → RecoveryAction` mapping + optional `usage → BridgeTraceRecorder`
 tracing wired. Covered by `tests/test_claude_integration.py::TestClaudeCLIBackend`.
+
+**Codex CLI backend (parity):** `gaiaagent.integrations.codex_cli` mirrors the
+claude adapter shape — same `run_agentic_loop` signature, same
+`ClaudeResponse` output, same `cli_available` / `prompt_too_long` /
+`stop_reason_to_recovery_action` helpers. Instead of `claude -p
+--output-format stream-json` it shells out to `codex exec --json
+--skip-git-repo-check` and consumes the JSONL event stream
+(`thread.started`, `turn.started`, `item.started`/`item.completed` with types
+`agent_message`/`command_execution`/`mcp_tool_call`, `turn.completed` with
+`usage`, `turn.failed`, `error`). MCP servers are configured via
+`-c mcp_servers.<name>.<key>=<val>` overrides (see `CodexMCPConfig`); auth is
+`CODEX_API_KEY`; sandbox is `--sandbox read-only|workspace-write|danger-full-access`.
+The AURC MCP server (`gaiaagent.mcp.server`) works with both CLIs identically.
+Covered by `tests/test_codex_integration.py` (23 tests).
 
 ### Step 3 — Remaining AURC Governance Wiring  🔜
 
@@ -181,6 +195,34 @@ llm = ClaudeLLM(
 resp = await llm.agentic_loop(prompt="Research AI agent protocols", correlation_id="req-1")
 ```
 
+Or with the `codex` CLI backend (OpenAI Codex):
+
+```python
+from gaiaagent.integrations.claude import ClaudeLLM
+from gaiaagent.integrations.codex_cli import CodexMCPConfig
+
+llm = ClaudeLLM(
+    model="gpt-5",
+    api_key=os.environ["CODEX_API_KEY"],
+    backend="codex",
+    codex_sandbox="read-only",
+    codex_mcp_config=[CodexMCPConfig(
+        name="aurc",
+        command="python",
+        args=["-m", "gaiaagent.mcp", "--agent", "myproj:ResearchAgent"],
+    )],
+    trace_recorder=recorder,
+    agent_id="aurc:myproj/researcher:v1.0",
+)
+resp = await llm.agentic_loop(prompt="Research AI agent protocols", correlation_id="req-1")
+```
+
+Or let AURC auto-select the first available CLI:
+
+```python
+llm = ClaudeLLM(backend="auto")  # prefers codex, then claude, then built-in
+```
+
 ---
 
 ## Out of Scope (for now)
@@ -190,7 +232,7 @@ resp = await llm.agentic_loop(prompt="Research AI agent protocols", correlation_
 | ❌ Rewrite `ask()` / `converse()` to delegate | Limit blast radius; they can adopt the same pattern later. |
 | ❌ Public streaming API (`agentic_loop_stream`) | No async-generator precedent in the codebase today; the CLI stream is consumed internally to produce one `ClaudeResponse`. Streaming exposure is a separate, opt-in change. |
 | ❌ Modify `MessageRouter` / bridges / harness / security code | Step 3 only *uses* them via the `_execute_tool` seam, it does not alter them. |
-| ❌ Vendor-lock to Claude | The CLI is one pluggable backend; "Pluggable LLM backends (beyond Claude)" remains a separate ROADMAP item. |
+| ❌ Vendor-lock to Claude | **Addressed**: the `backend` parameter (`claude` / `codex` / `auto`) makes the pluggable seam real. The `codex` CLI backend is a second reference; additional backends mirror the same adapter. |
 | ❌ Add a Python SDK dependency | The `claude` CLI is the engine; no `claude-agent-sdk` pip dep is introduced. |
 
 ---
@@ -210,7 +252,7 @@ resp = await llm.agentic_loop(prompt="Research AI agent protocols", correlation_
 
 - **Claim a step** — comment in [Discussions](https://github.com/gaiaagent/gaiaagent/discussions) to take Step 1 or Step 3.
 - **Propose a mapping** — if a CLI concept has no AURC counterpart yet, open an issue labeled `loop-integration`.
-- **Port to another loop backend** — the `_execute_tool` seam and `run_agentic_loop` adapter shape are intentionally backend-agnostic; a non-Claude loop can mirror them.
+- **Port to another loop backend** — **demonstrated**: `codex_cli.py` mirrors `claude_cli.py` and is wired via the `backend` parameter. Additional backends follow the same pattern.
 
 ---
 

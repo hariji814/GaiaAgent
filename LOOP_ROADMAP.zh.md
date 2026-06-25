@@ -11,8 +11,8 @@
 
 | | |
 |:---|:---|
-| **当前状态** | ✅ **已发布。** `ClaudeLLM.agentic_loop` 在 `claude` CLI 在 PATH 时委托给 `claude -p --output-format stream-json`,带安全子进程包装(并发 stdout/stderr 排空、超时、取消即 kill)与防御性 stream-json 解析;否则降级到内置 `anthropic` 循环。✅ **MCP server 已发布**(`gaiaagent.mcp.server`)——把 AURC `@skill` agent 暴露为 MCP 工具,CLI 的工具调用在协议层进入总线。299 测试通过。 |
-| **诚实评估** | README 的"Claude-native"对*循环委托*与 skill 的 *MCP 暴露*已是实质承诺。**尚未接通**:生命周期(harness 不驱动 `agentic_loop`)、CLI 工具调用的 CapABAC 鉴权、session/resume 与 `ContextStore` 绑定。概念映射表标注了每行状态。 |
+| **当前状态** | ✅ **已发布。** `ClaudeLLM.agentic_loop` 在 `claude` CLI 在 PATH 时委托给 `claude -p --output-format stream-json`,带安全子进程包装(并发 stdout/stderr 排空、超时、取消即 kill)与防御性 stream-json 解析;否则降级到内置 `anthropic` 循环。✅ **MCP server 已发布**(`gaiaagent.mcp.server`)——把 AURC `@skill` agent 暴露为 MCP 工具,CLI 的工具调用在协议层进入总线。2322 测试通过。`codex` CLI(`codex exec --json`)现为第二个参考后端,通过同一适配器形状;参数 `backend`(`claude` / `codex` / `auto`)使可插拔缝变为真实,而非仅愿景。 |
+| **诚实评估** | README 的"Claude-native"对*循环委托*与 skill 的 *MCP 暴露*已是实质承诺。**现已接通**:`backend` 参数使可插拔 loop 缝变为真实 — `claude` 与 `codex` CLI 后端可互换,`auto` 选择 PATH 上第一个可用 CLI。**尚未接通**:生命周期(harness 不驱动 `agentic_loop`)、CLI 工具调用的 CapABAC 鉴权、session/resume 与 `ContextStore` 绑定。概念映射表标注了每行状态。 |
 | **依赖状态** | **不新增 Python 依赖。** `claude` CLI 是外部运行时要求,运行时在 PATH 上探测。`pyproject.toml` 的 `claude` extra 保留 `anthropic>=0.40` 作降级路径。 |
 
 > 本文档**持续更新**,状态反映 HEAD 处代码。CLI 的 `stream-json` 事件 schema 采用防御性解析(全用 `.get()`、`isinstance` 守卫、空流 → 报错而非静默成功)。
@@ -155,7 +155,7 @@ resp = await llm.agentic_loop(prompt="Research AI agent protocols", correlation_
 | ❌ 改写 `ask()` / `converse()` 委托 | 限制影响面;它们日后可同样采纳。 |
 | ❌ 对外 streaming API(`agentic_loop_stream`) | 代码库当前无 async-generator 先例;CLI 流在内部聚合成单个 `ClaudeResponse`。streaming 暴露是单独的 opt-in 变更。 |
 | ❌ 修改 `MessageRouter` / 桥 / harness / security 代码 | Step 3 只经 `_execute_tool` 缝*用*它们,不改它们。 |
-| ❌ 锁定 Claude | CLI 是一个可插拔后端;"Pluggable LLM backends(beyond Claude)"仍是独立 ROADMAP 项。 |
+| ❌ 锁定 Claude | **已解决**:`backend` 参数(`claude` / `codex` / `auto`)使可插拔缝变为真实。`codex` CLI 后端为第二个参考;额外后端同样镜像该适配器形状。 |
 | ❌ 新增 Python SDK 依赖 | `claude` CLI 即引擎;不引入 `claude-agent-sdk` pip 依赖。 |
 
 ---
@@ -175,7 +175,7 @@ resp = await llm.agentic_loop(prompt="Research AI agent protocols", correlation_
 
 - **认领一步** — 在 [Discussions](https://github.com/gaiaagent/gaiaagent/discussions) 评论认领 Step 1 或 Step 3。
 - **提议一项映射** — 若某 CLI 概念尚无 AURC 对应,开 issue 打 `loop-integration` 标签。
-- **移植到其他 loop 后端** — `_execute_tool` 缝与 `run_agentic_loop` 适配器形状刻意保持后端无关;非 Claude loop 可镜像之。
+- **移植到其他 loop 后端** — **已示范**:`codex_cli.py` 镜像 `claude_cli.py`,通过 `backend` 参数接入。额外后端同模式。
 
 ---
 
