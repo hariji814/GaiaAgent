@@ -1,7 +1,7 @@
 # Contributing to GaiaAgent
 
+> 🌐 [中文版](CONTRIBUTING.zh.md)
 > **Thank you for considering contributing to GaiaAgent and the AURC protocol!**
-> 感谢你关注 GaiaAgent 并考虑贡献！
 
 Whether you're fixing a bug, proposing a feature, writing a protocol bridge, or improving documentation — your contribution makes the AI agent ecosystem more connected and more powerful.
 
@@ -52,7 +52,7 @@ Have an idea? [Open a feature request](https://github.com/gaiaagent/gaiaagent/is
 
 ### 🔌 Write a Protocol Bridge
 
-One of the most powerful ways to contribute is writing a bridge for a new protocol. See the [Bridge Developer Guide](docs/architecture/bridge-guide.md) for a step-by-step walkthrough.
+One of the most powerful ways to contribute is writing a bridge for a new protocol. See the [Bridge Developer Guide](docs/en/architecture/bridge-guide.md) for a step-by-step walkthrough.
 
 Current bridges: MCP, A2A, ACP. We'd love bridges for: gRPC, GraphQL, NATS, Kafka, AMQP, or any protocol you use.
 
@@ -244,6 +244,8 @@ Why is this change needed? Link to issue if applicable.
 4. **Squash and merge** — maintainers will squash your commits on merge
 
 ---
+
+<a id="protocol-changes"></a>
 
 ## Protocol Changes (AURC-RFC)
 

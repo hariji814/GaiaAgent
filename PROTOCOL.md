@@ -1,40 +1,40 @@
 # AURC Protocol Specification v0.1
 
 **Agent Unified Runtime & Communication Protocol**
-**Agent 统一运行时与通信协议**
 
-> **[← Back to README](README.md)** | [Architecture](docs/architecture.md) | [API Reference](docs/api-reference.md) | [Quick Start](docs/guides/quickstart.md)
+> 🌐 [中文版](PROTOCOL.zh.md)
+> **[← Back to README](README.md)** | [Architecture](docs/en/architecture.md) | [API Reference](docs/en/api-reference.md) | [Quick Start](docs/en/guides/quickstart.md)
 >
-> Status: Draft / 状态：草案
+> Status: Draft
 > Version: 0.1.0
 > License: CC BY-SA 4.0 (specification) / AGPL-3.0 (implementation)
 
 ---
 
-## Table of Contents / 目录
+## Table of Contents
 
-1. [Introduction / 介绍](#1-introduction)
-2. [Design Principles / 设计原则](#2-design-principles)
-3. [Architecture Overview / 架构概览](#3-architecture)
-4. [L1: Agent Identity / Agent 身份](#4-l1-agent-identity)
-5. [L2: Runtime Harness / 运行时 Harness](#5-l2-runtime-harness)
-6. [L3: Unified Message Bus / 统一消息总线](#6-l3-unified-message-bus)
-7. [L4: Protocol Bridges / 协议桥接](#7-l4-protocol-bridges)
-8. [L5: Context Correlation / 上下文关联](#8-l5-context-correlation)
-9. [L6: Security / 安全](#9-l6-security)
-10. [L7: Discovery / 发现](#10-l7-discovery)
-11. [L0: Transport / 传输](#11-l0-transport)
-12. [Comparison with Existing Protocols / 与现有协议对比](#12-comparison)
-13. [Use Case Scenarios / 使用场景](#13-use-cases)
-14. [SDK Design / SDK 设计](#14-sdk-design)
-15. [Roadmap / 路线图](#15-roadmap)
-16. [Glossary / 术语表](#16-glossary)
+1. [Introduction](#1-introduction)
+2. [Design Principles](#2-design-principles)
+3. [Architecture Overview](#3-architecture)
+4. [L1: Agent Identity](#4-l1-agent-identity)
+5. [L2: Runtime Harness](#5-l2-runtime-harness)
+6. [L3: Unified Message Bus](#6-l3-unified-message-bus)
+7. [L4: Protocol Bridges](#7-l4-protocol-bridges)
+8. [L5: Context Correlation](#8-l5-context-correlation)
+9. [L6: Security](#9-l6-security)
+10. [L7: Discovery](#10-l7-discovery)
+11. [L0: Transport](#11-l0-transport)
+12. [Comparison with Existing Protocols](#12-comparison)
+13. [Use Case Scenarios](#13-use-cases)
+14. [SDK Design](#14-sdk-design)
+15. [Roadmap](#15-roadmap)
+16. [Glossary](#16-glossary)
 
 ---
 
 ## 1. Introduction
 
-### 1.1 Motivation / 动机
+### 1.1 Motivation
 
 The 2025-2026 AI agent ecosystem has produced several communication protocols, each solving a specific layer:
 
@@ -51,7 +51,7 @@ The 2025-2026 AI agent ecosystem has produced several communication protocols, e
 3. A **unified identity** system that works across all protocols
 4. **Security enforcement** at the protocol level
 
-### 1.2 Scope / 范围
+### 1.2 Scope
 
 This specification defines:
 - The AURC message format and protocol semantics
@@ -70,49 +70,49 @@ This specification does NOT define:
 
 ## 2. Design Principles
 
-| # | Principle / 原则 | Meaning / 含义 |
+| # | Principle | Meaning |
 |---|---|---|
-| 1 | **Bridge First** / 桥接优先 | Don't invent new communication primitives; unify existing protocols |
-| 2 | **Runtime is King** / 运行时为核心 | Agent = Model + Harness; the Harness is a first-class citizen |
-| 3 | **Progressive Complexity** / 渐进复杂度 | Simple core, enterprise features as optional modules |
-| 4 | **Protocol-Agnostic Identity** / 协议无关身份 | One agent, one identity across all protocols |
-| 5 | **Security by Default** / 安全第一 | Permissions are enforceable at the protocol level, not just declarative |
+| 1 | **Bridge First** | Don't invent new communication primitives; unify existing protocols |
+| 2 | **Runtime is King** | Agent = Model + Harness; the Harness is a first-class citizen |
+| 3 | **Progressive Complexity** | Simple core, enterprise features as optional modules |
+| 4 | **Protocol-Agnostic Identity** | One agent, one identity across all protocols |
+| 5 | **Security by Default** | Permissions are enforceable at the protocol level, not just declarative |
 
 ---
 
 ## 3. Architecture
 
-### 3.1 Layered Model / 分层模型
+### 3.1 Layered Model
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ L7  Discovery / 发现层                                        │
+│ L7  Discovery                                                 │
 │     Agent registry, capability matching, health-based routing │
 ├──────────────────────────────────────────────────────────────┤
-│ L6  Security / 安全层                                         │
+│ L6  Security                                                  │
 │     Auth, CapABAC authorization, delegation chains, audit     │
 ├──────────────────────────────────────────────────────────────┤
-│ L5  Context Correlation / 上下文关联层                         │
+│ L5  Context Correlation                                       │
 │     Cross-protocol context tracking, permission propagation   │
 ├──────────────────────────────────────────────────────────────┤
-│ L4  Protocol Bridges / 协议桥接层                              │
+│ L4  Protocol Bridges                                          │
 │     MCP Bridge / A2A Bridge / ACP Bridge / Custom Bridge      │
 ├──────────────────────────────────────────────────────────────┤
-│ L3  Unified Message Bus / 统一消息总线                         │
+│ L3  Unified Message Bus                                       │
 │     Canonical message format, routing, session management     │
 ├──────────────────────────────────────────────────────────────┤
-│ L2  Runtime Harness / 运行时 Harness                          │
+│ L2  Runtime Harness                                           │
 │     Lifecycle, health monitoring, context/memory, recovery    │
 ├──────────────────────────────────────────────────────────────┤
-│ L1  Agent Identity / Agent 身份                               │
+│ L1  Agent Identity                                            │
 │     AURC ID, capability declaration, protocol binding         │
 ├──────────────────────────────────────────────────────────────┤
-│ L0  Transport / 传输层                                        │
+│ L0  Transport                                                 │
 │     HTTP/2, WebSocket, stdio, gRPC                            │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Roles / 角色
+### 3.2 Roles
 
 | Role | Description |
 |------|-------------|
@@ -587,21 +587,15 @@ class ResearchAgent:
 
 ---
 
-## 15. Roadmap / 路线图
+## 15. Roadmap
 
 The normative protocol scope of **AURC v0.1** is everything described in this document (L0–L7, bridges for MCP/A2A/ACP, CapABAC, the 9-state lifecycle). This is the **frozen** reference for implementers.
 
-**AURC v0.1 的协议范围即本文档所述全部内容（L0–L7、MCP/A2A/ACP 桥接、CapABAC、9 态生命周期），为实现者提供冻结的参考。**
-
 The living project roadmap — version milestones (v0.2 → v1.0), the six workstreams (Runtime, Interop, Security, Observability, Ecosystem, Standardization), acceptance criteria, and explicit non-goals — is maintained separately:
-
-项目的持续演进路线图——版本里程碑（v0.2 → v1.0）、六大赛道、验收标准与非目标——单独维护：
 
 ➡️ **[ROADMAP.md](ROADMAP.md)**
 
-Protocol-level changes (new message types, lifecycle states, security-model revisions, bridge-interface requirements) are governed by the [AURC-RFC process](CONTRIBUTING.md#protocol-changes-aurc-rfc) and require ≥2 maintainer approvals plus a 2-week public comment period. AURC becomes a recognized standard once a **second independent implementation** passes the conformance suite.
-
-协议级变更受 [AURC-RFC 流程](CONTRIBUTING.md#protocol-changes-aurc-rfc) 治理，需 ≥2 名维护者批准及 2 周公开评议。当**第二个独立实现**通过一致性测试集时，AURC 即成为公认标准。
+Protocol-level changes (new message types, lifecycle states, security-model revisions, bridge-interface requirements) are governed by the [AURC-RFC process](CONTRIBUTING.md#protocol-changes) and require ≥2 maintainer approvals plus a 2-week public comment period. AURC becomes a recognized standard once a **second independent implementation** passes the conformance suite.
 
 ---
 
