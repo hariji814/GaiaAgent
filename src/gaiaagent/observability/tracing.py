@@ -19,9 +19,12 @@ roadmap (Track 4): the spans it records map directly onto OTel trace spans.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..core.message import AURCMessage
+
+if TYPE_CHECKING:
+    from .trace_sink import TraceSink
 
 
 @dataclass
@@ -82,9 +85,22 @@ class BridgeTraceRecorder:
             print(span.to_log_line())
     """
 
-    def __init__(self, max_traces: int = 10_000) -> None:
+    def __init__(
+        self,
+        max_traces: int = 10_000,
+        sink: TraceSink | None = None,
+    ) -> None:
+        """Create a recorder backed by *sink* (default: in-memory grouped store).
+
+        Pass a ``FileTraceSink`` for real-time JSONL persistence + rotation.
+        """
         self._max_traces = max_traces
-        self._traces: dict[str | None, list[TraceSpan]] = {}
+        if sink is not None:
+            self._sink = sink
+        else:
+            from .trace_sink import MemoryTraceSink
+
+            self._sink = MemoryTraceSink(max_traces=max_traces)
 
     def record(self, message: AURCMessage) -> TraceSpan:
         """Record a message as a trace span, keyed by its correlation_id.
@@ -117,21 +133,20 @@ class BridgeTraceRecorder:
         当 span 与入站 AURCMessage 非一一对应时使用——例如桥接转发器想记录
         它刚执行的*出站*跳（AURC → 外部），并附加 bridge_chain。
         """
-        self._traces.setdefault(span.correlation_id, []).append(span)
-        self._enforce_cap()
+        self._sink.store(span)
         return span
 
     def get_trace(self, correlation_id: str | None) -> list[TraceSpan]:
         """Return all spans sharing a correlation_id, in insertion order.
         返回共享同一 correlation_id 的所有 span（按插入顺序）
         """
-        return list(self._traces.get(correlation_id, []))
+        return self._sink.trace(correlation_id)
 
     def all_traces(self) -> dict[str | None, list[TraceSpan]]:
         """Return a snapshot of every recorded trace.
         返回所有已记录追踪的快照
         """
-        return {cid: list(spans) for cid, spans in self._traces.items()}
+        return self._sink.all_traces()
 
     def render_trace(self, correlation_id: str | None) -> str:
         """Render a full trace as multi-line structured logs.
@@ -152,32 +167,20 @@ class BridgeTraceRecorder:
         """Number of distinct correlation IDs recorded.
         已记录的不同 correlation ID 数量
         """
-        return len(self._traces)
+        return self._sink.trace_count
 
     @property
     def span_count(self) -> int:
         """Total spans recorded across all traces.
         所有追踪中记录的 span 总数
         """
-        return sum(len(spans) for spans in self._traces.values())
+        return self._sink.span_count
 
     def clear(self) -> int:
         """Clear all recorded traces. Returns the number of traces dropped.
         清除所有已记录追踪。返回被丢弃的追踪数量
         """
-        dropped = len(self._traces)
-        self._traces.clear()
-        return dropped
-
-    def _enforce_cap(self) -> None:
-        """Evict the oldest traces when the cap is exceeded.
-        超出上限时淘汰最旧的追踪
-        """
-        # dict preserves insertion order in Python 3.7+; drop oldest keys first.
-        # dict 在 Python 3.7+ 保持插入顺序；优先丢弃最早的 key。
-        while len(self._traces) > self._max_traces:
-            oldest = next(iter(self._traces))
-            del self._traces[oldest]
+        return self._sink.clear()
 
 
 __all__ = ["TraceSpan", "BridgeTraceRecorder"]
