@@ -7,6 +7,7 @@ Uses JSON over HTTP POST for request/response patterns.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -44,6 +45,7 @@ class HTTPTransportServer:
         self._handler: HTTPMessageHandler | None = None
         self._dashboard_api: Any = None  # DashboardAPI ASGI app
         self._server: Any = None  # Will hold the actual server instance
+        self._serve_task: asyncio.Task[None] | None = None  # tracked for graceful drain
         self._running = False
         # Extra POST routes: path -> handler (for bridge endpoints, etc.)
         self._routes: dict[str, HTTPMessageHandler] = {}
@@ -63,7 +65,13 @@ class HTTPTransportServer:
         self._routes[path] = handler
 
     async def start(self) -> None:
-        """Start the HTTP server. 启动 HTTP 服务器"""
+        """Start the HTTP server and block until it stops.
+
+        启动 HTTP 服务器并阻塞直到其停止。
+
+        The uvicorn Server.serve() runs in a tracked task so that
+        stop() can await the graceful drain of in-flight requests.
+        """
         try:
             from uvicorn import Config, Server
 
@@ -73,17 +81,75 @@ class HTTPTransportServer:
             self._server = Server(config)
             self._running = True
             logger.info("HTTP transport server starting on %s:%d", self._host, self._port)
-            await self._server.serve()
+            # Run serve in a tracked task so stop() can await graceful drain
+            # / 在可追踪任务中运行 serve，使 stop() 能等待优雅排空
+            self._serve_task = asyncio.create_task(self._server.serve())
+            try:
+                await self._serve_task
+            finally:
+                self._running = False
         except ImportError:
             logger.error("uvicorn not installed. Install with: pip install gaiaagent[http]")
             raise HTTPTransportError("uvicorn is required for HTTP transport")
 
-    async def stop(self) -> None:
-        """Stop the HTTP server. 停止 HTTP 服务器"""
-        if self._server:
-            self._server.should_exit = True
+    async def stop(self, timeout: float = 5.0) -> None:
+        """Stop the HTTP server, awaiting graceful drain of in-flight requests.
+
+        停止 HTTP 服务器，等待在途请求优雅排空。
+
+        Sets should_exit so uvicorn finishes active connections, then waits
+        up to timeout seconds; on timeout it flips force_exit for a hard
+        shutdown so callers are never blocked indefinitely.
+        """
+        server = self._server
+        task = self._serve_task
+        if server is not None:
+            server.should_exit = True
+            if task is not None and not task.done():
+                try:
+                    # shield() keeps serve alive if wait_for times out
+                    # / shield() 保证超时时不取消 serve 任务
+                    await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "HTTP server did not drain within %.1fs; forcing exit",
+                        timeout,
+                    )
+                    server.force_exit = True
+                    await task
             self._running = False
             logger.info("HTTP transport server stopped")
+
+    def install_signal_handlers(self) -> None:
+        """Best-effort SIGINT/SIGTERM hooks for graceful drain on signal.
+
+        尽力安装 SIGINT/SIGTERM 钩子，收到信号时优雅排空。
+
+        uvicorn installs its own handlers in the main thread by default; call
+        this when running outside the main thread, or when you want GaiaAgent
+        drain-on-signal behavior. Silently no-ops on platforms lacking support.
+        """
+        import signal
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        def _drain() -> None:
+            logger.info("Received shutdown signal; draining HTTP server")
+            if self._server is not None:
+                self._server.should_exit = True
+
+        for sig in (getattr(signal, "SIGINT", None), getattr(signal, "SIGTERM", None)):
+            if sig is None:
+                continue
+            try:
+                loop.add_signal_handler(sig, _drain)
+            except (NotImplementedError, RuntimeError, ValueError):
+                # Windows ProactorEventLoop / non-main thread unsupported
+                # / Windows 或非主线程下不支持，安全跳过
+                continue
 
     @property
     def is_running(self) -> bool:
