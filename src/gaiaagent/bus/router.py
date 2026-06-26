@@ -17,6 +17,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ..core.message import AURCMessage
+from ..security.message_authz import AuthzDeniedError, MessageAuthorizer
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,10 @@ class MessageRouter:
         # Statistics / 统计
         self._stats = RouterStats()
 
+        # Optional hot-path authorizer. When None, routing behaves exactly
+        # like the unauthenticated path (backward compatible).
+        self._authorizer: MessageAuthorizer | None = None
+
     # =========================================================================
     # Handler Registration / 处理函数注册
     # =========================================================================
@@ -102,6 +107,14 @@ class MessageRouter:
         """
         self._bridge_forwarders[protocol] = forwarder
         logger.info("Router: registered bridge forwarder for '%s'", protocol)
+
+    def set_authorizer(self, authorizer: MessageAuthorizer) -> None:
+        """Attach a hot-path authorizer. When set, every routed message is
+        authorized (fail-closed) before dispatch. Attaching twice replaces
+        the previous authorizer.
+        """
+        self._authorizer = authorizer
+        logger.info("Router: hot-path authorizer attached")
 
     # =========================================================================
     # Subscriptions / 订阅
@@ -150,6 +163,20 @@ class MessageRouter:
 
         target = message.target
         self._stats.total_routed += 1
+
+        # Authorization (hot-path guard). When an authorizer is attached,
+        # every routed message is authorized before dispatch (fail-closed).
+        # No authorizer => identical behavior to the unauthenticated path.
+        if self._authorizer is not None:
+            try:
+                self._authorizer.authorize_message(message)
+            except AuthzDeniedError:
+                self._stats.denied += 1
+                logger.warning(
+                    "Authorization denied for message '%s': %s -> %s",
+                    message.message_id, message.source, message.target,
+                )
+                raise
 
         # 1. Direct routing / 直连路由
         if target in self._handlers:
@@ -279,6 +306,7 @@ class RouterStats:
         self.dead_lettered: int = 0
         self.dropped: int = 0
         self.errors: int = 0
+        self.denied: int = 0
 
     def to_dict(self) -> dict[str, int]:
         return {
@@ -289,6 +317,7 @@ class RouterStats:
             "dead_lettered": self.dead_lettered,
             "dropped": self.dropped,
             "errors": self.errors,
+            "denied": self.denied,
         }
 
     def reset(self) -> None:
@@ -299,3 +328,4 @@ class RouterStats:
         self.dead_lettered = 0
         self.dropped = 0
         self.errors = 0
+        self.denied = 0

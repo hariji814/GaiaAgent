@@ -27,6 +27,14 @@ from gaiaagent.security.delegation import (
     DelegationValidator,
     compute_chain_hash,
 )
+from gaiaagent.security.message_authz import (
+    AuthzDeniedError,
+    AuthzRequest,
+    MessageAuthorizer,
+    RouteAuthzGuard,
+    derive_authz_request,
+    extract_agent_id,
+)
 
 __all__ = [
     # Auth
@@ -38,6 +46,9 @@ __all__ = [
     # Delegation
     "DelegationBuilder", "DelegationResult", "DelegationValidator",
     "compute_chain_hash",
+    # Message authz (hot path)
+    "AuthzDeniedError", "AuthzRequest", "MessageAuthorizer",
+    "RouteAuthzGuard", "derive_authz_request", "extract_agent_id",
     # Audit
     "AuditAction", "AuditEntry", "AuditLog", "AuditSeverity",
 ]

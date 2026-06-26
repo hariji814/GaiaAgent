@@ -16,6 +16,13 @@ from gaiaagent.bus.router import MessageRouter
 from gaiaagent.core.identity import AgentDescriptor
 from gaiaagent.core.message import AURCMessage
 from gaiaagent.harness.lifecycle import RuntimeHarness
+from gaiaagent.security.audit import AuditLog
+from gaiaagent.security.authz import AuthorizationEngine
+from gaiaagent.security.message_authz import (
+    AuthzDeniedError,
+    MessageAuthorizer,
+    RouteAuthzGuard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +42,28 @@ class AURCServer:
         self,
         harness: RuntimeHarness | None = None,
         router: MessageRouter | None = None,
+        authz_engine: AuthorizationEngine | None = None,
+        authorizer: MessageAuthorizer | None = None,
+        audit_log: AuditLog | None = None,
     ) -> None:
         self.harness = harness or RuntimeHarness()
         self.router = router or MessageRouter()
         # agent_id -> agent instance (carries @skill methods + descriptor)
         self._agents: dict[str, Any] = {}
+        # Wire a hot-path authorizer onto the router. An explicit authorizer
+        # wins; otherwise an authz_engine is wrapped in a RouteAuthzGuard.
+        # Leaving both None keeps the legacy unauthenticated behavior.
+        if authorizer is not None:
+            if isinstance(authorizer, RouteAuthzGuard):
+                # Retroactively wire the shared audit log into a caller-
+                # supplied guard without clobbering one it already owns.
+                authorizer.attach_audit(audit_log)
+            self.router.set_authorizer(authorizer)
+        elif authz_engine is not None:
+            self.router.set_authorizer(
+                RouteAuthzGuard(authz_engine, audit=audit_log)
+            )
+        self.audit_log: AuditLog | None = audit_log
 
     async def register_agent(self, agent: Any) -> str:
         """Register a @aurc_agent-decorated instance with the server.
@@ -112,6 +136,9 @@ class AURCServer:
 
         try:
             outcome = await self.router.route(msg)
+        except AuthzDeniedError as exc:
+            logger.info("Authorization denied for %s: %s", msg.message_id, exc.reason)
+            return {"error": {"code": "forbidden", "message": exc.reason, "recoverable": False}}
         except Exception as exc:
             logger.exception("route failed for %s", msg.message_id)
             return {"error": {"code": "route_error", "message": str(exc)}}

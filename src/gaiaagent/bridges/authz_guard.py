@@ -22,6 +22,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from ..core.message import AURCMessage
+from ..security.message_authz import derive_authz_request, extract_agent_id
 
 if TYPE_CHECKING:
     from ..security.authz import AuthorizationEngine
@@ -83,12 +84,13 @@ class BridgeAuthzGuard:
         """
         # Derive authorization inputs from the translated message.
         # / 从翻译后的消息推导授权输入。
-        agent_id = self._extract_agent_id(message)
-        resource_type = message.body.skill or message.body.method or "unknown"
-        action = message.body.method or "invoke"
-        attributes: dict[str, Any] = dict(message.body.params)
-        attributes["source"] = message.source
-        attributes["message_type"] = message.type.value if message.type else "unknown"
+        # Reuse the shared derivation so bridge and hot-path enforcement
+        # stay consistent (see security.message_authz.derive_authz_request).
+        req = derive_authz_request(message)
+        agent_id = req.agent_id
+        resource_type = req.resource_type
+        action = req.action
+        attributes = req.attributes
 
         # Validate delegation chain first (if a validator is attached).
         # / 若挂载了委托验证器，先验证委托链。
@@ -141,12 +143,7 @@ class BridgeAuthzGuard:
         'acp:external/<id>'. We strip the 'external/' qualifier so the
         AuthorizationEngine sees the raw agent id.
         """
-        source = message.source or "unknown"
-        # 'a2a:external/<id>' -> '<id>'; keep protocol prefix for traceability
-        # / 'a2a:external/<id>' -> '<id>'，保留协议前缀用于追溯
-        if "external/" in source:
-            return source.split("external/", 1)[1]
-        return source
+        return extract_agent_id(message)
 
 
 class _GuardedBridge:

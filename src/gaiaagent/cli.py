@@ -122,10 +122,14 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     echo agent is registered by default; pass --agent to load your own.
     可选启用健康仪表盘端点
     """
+    from gaiaagent.security.audit import AuditLog
     from gaiaagent.server import AURCServer
     from gaiaagent.transport.http import HTTPTransportServer
 
-    aurc = AURCServer()
+    # One shared audit log: the hot-path authz guard writes decisions
+    # here, and the dashboard (if enabled) reads the same instance, so
+    # /metrics and the audit table reflect real authorization events.
+    aurc = AURCServer(audit_log=AuditLog())
 
     # Register the user-supplied agent if given, else a built-in echo agent.
     agents_loaded: list[str] = []
@@ -142,9 +146,10 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     if args.dashboard:
         from gaiaagent.observability.dashboard import DashboardAPI, HealthDashboard
-        from gaiaagent.security.audit import AuditLog
 
-        dashboard = HealthDashboard(aurc.harness, AuditLog(), aurc.router)
+        dashboard = HealthDashboard(
+            aurc.harness, aurc.audit_log or AuditLog(), aurc.router
+        )
         http.set_dashboard_api(DashboardAPI(dashboard))
 
     quiet = args.quiet
