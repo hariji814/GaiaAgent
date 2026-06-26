@@ -224,20 +224,57 @@ class HTTPTransportServer:
 
 class HTTPTransportClient:
     """HTTP client for sending AURC messages.
-    发送 AURC 消息的 HTTP 客户端
+
+    Uses a long-lived httpx.AsyncClient (connection pooling) with
+    configurable connect/read timeouts and exponential-backoff retry on
+    transient failures. Falls back to urllib when httpx is unavailable.
 
     Usage / 用法:
         client = HTTPTransportClient()
         response = await client.send("http://localhost:8080/aurc", message_dict)
+        await client.close()  # close the pooled client when done
     """
 
-    def __init__(self, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        timeout_seconds: float = 30.0,
+        *,
+        connect_timeout: float = 5.0,
+        read_timeout: float | None = None,
+        max_retries: int = 3,
+        retry_backoff: float = 0.5,
+    ) -> None:
         self._timeout = timeout_seconds
-        self._session: Any = None
+        self._connect_timeout = connect_timeout
+        self._read_timeout = read_timeout if read_timeout is not None else timeout_seconds
+        self._max_retries = max_retries
+        self._retry_backoff = retry_backoff
+        self._client: Any = None  # lazily-created long-lived httpx.AsyncClient
+
+    async def _get_client(self) -> Any:
+        """Return the long-lived pooled client, creating it on first use."""
+        if self._client is not None:
+            return self._client
+        try:
+            import httpx
+
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=self._connect_timeout,
+                    read=self._read_timeout,
+                    write=self._timeout,
+                    pool=self._timeout,
+                ),
+                limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+            )
+        except ImportError:
+            self._client = None  # signal urllib fallback
+        return self._client
 
     async def send(self, url: str, message: dict[str, Any]) -> dict[str, Any]:
-        """Send an AURC message via HTTP POST.
-        通过 HTTP POST 发送 AURC 消息
+        """Send an AURC message via HTTP POST, retrying transient failures.
+
+        通过 HTTP POST 发送 AURC 消息，对瞬时故障指数退避重试。
 
         Args:
             url: Target URL / 目标 URL
@@ -245,51 +282,94 @@ class HTTPTransportClient:
 
         Returns:
             Response dict / 响应字典
+
+        Raises:
+            HTTPTransportError: If all retries are exhausted or the server
+                returns a non-transient error.
         """
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(
-                    url,
-                    json=message,
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-Protocol": "aurc/0.1",
-                    },
-                )
+        client = await self._get_client()
+        if client is None:
+            return self._send_urllib(url, message)
+
+        import asyncio
+
+        headers = {"Content-Type": "application/json", "X-Protocol": "aurc/0.1"}
+        last_exc: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = await client.post(url, json=message, headers=headers)
                 response.raise_for_status()
                 result: dict[str, Any] = response.json()
                 return result
-        except ImportError:
-            # Fallback to urllib / 回退到 urllib
-            import urllib.request
-            data = json.dumps(message, default=str).encode()
-            req = urllib.request.Request(
-                url,
-                data=data,
-                headers={"Content-Type": "application/json", "X-Protocol": "aurc/0.1"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                result = json.loads(resp.read())
-            return result
+            except Exception as exc:
+                last_exc = exc
+                if not self._is_retryable(exc) or attempt == self._max_retries:
+                    break
+                backoff = self._retry_backoff * (2 ** attempt)
+                logger.warning(
+                    "HTTP send attempt %d failed (%s); retrying in %.2fs",
+                    attempt + 1, type(exc).__name__, backoff,
+                )
+                await asyncio.sleep(backoff)
+        raise HTTPTransportError(
+            f"send to {url} failed after {self._max_retries + 1} attempt(s): {last_exc}"
+        ) from last_exc
+
+    def _send_urllib(self, url: str, message: dict[str, Any]) -> dict[str, Any]:
+        """urllib fallback (no retry, no pooling). urllib 回退。"""
+        import urllib.request
+
+        data = json.dumps(message, default=str).encode()
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json", "X-Protocol": "aurc/0.1"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            result: dict[str, Any] = json.loads(resp.read())
+        return result
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        """True for transient (connection/timeout/5xx) failures, False for 4xx."""
+        name = type(exc).__name__
+        # httpx transport errors (connect/read/timeout/pool) are retryable.
+        if name in {"ConnectError", "ReadTimeout", "WriteTimeout", "PoolTimeout",
+                    "ConnectTimeout", "ReadError", "RemoteProtocolError"}:
+            return True
+        # httpx.HTTPStatusError: retry on 5xx and 429, not on other 4xx.
+        status = getattr(exc, "response", None)
+        if status is not None:
+            code = getattr(status, "status_code", None)
+            if isinstance(code, int):
+                return code >= 500 or code == 429
+        return False
 
     async def health_check(self, url: str) -> dict[str, Any]:
         """Check health of a remote agent. 检查远程 Agent 的健康状态"""
         try:
             from urllib.parse import urlparse
 
-            import httpx
+            client = await self._get_client()
+            if client is None:
+                import urllib.request
+
+                parsed = urlparse(url)
+                health_url = f"{parsed.scheme}://{parsed.netloc}/health"
+                with urllib.request.urlopen(health_url, timeout=self._timeout) as resp:
+                    result2: dict[str, Any] = json.loads(resp.read())
+                return result2
             parsed = urlparse(url)
             health_url = f"{parsed.scheme}://{parsed.netloc}/health"
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.get(health_url)
-                result: dict[str, Any] = response.json()
-                return result
+            response = await client.get(health_url)
+            result: dict[str, Any] = response.json()
+            return result
         except Exception:
             return {"status": "unreachable"}
 
     async def close(self) -> None:
-        """Close the client session. 关闭客户端会话"""
-        if self._session:
-            await self._session.aclose()
+        """Close the pooled client session. 关闭连接池客户端会话"""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
