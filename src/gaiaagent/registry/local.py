@@ -189,6 +189,23 @@ class LocalRegistry:
         if entry:
             entry.heartbeat()
 
+    def evict_stale(self, ttl_seconds: float) -> list[str]:
+        """Remove agents whose last heartbeat exceeds *ttl_seconds*.
+
+        Returns the IDs of evicted agents. Stale agents should not stay
+        discoverable forever in a long-running registry.
+        """
+        if ttl_seconds <= 0:
+            return []
+        cutoff = datetime.now(timezone.utc).timestamp() - ttl_seconds
+        evicted: list[str] = []
+        for aid, entry in list(self._entries.items()):
+            if entry.last_heartbeat.timestamp() < cutoff:
+                del self._entries[aid]
+                evicted.append(aid)
+                logger.info("Registry: evicted stale agent '%s'", aid)
+        return evicted
+
     # =========================================================================
     # Import/Export / 导入导出
     # =========================================================================
