@@ -8,6 +8,8 @@ from gaiaagent.workflows.orchestrator import (
     OrchestratorWorkers,
     ParallelFanOut,
     PromptChain,
+    RouterDelegate,
+    RouterDelegateError,
     WorkflowResult,
 )
 
@@ -18,6 +20,8 @@ __all__ = [
     "IntelligentRouter",
     "OrchestratorWorkers",
     "ParallelFanOut",
+    "RouterDelegate",
+    "RouterDelegateError",
     "PromptChain",
     "WorkflowResult",
 ]

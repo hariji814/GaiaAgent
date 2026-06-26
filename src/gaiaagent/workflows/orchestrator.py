@@ -31,16 +31,63 @@ Architecture / 架构:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
-from collections.abc import Awaitable, Callable
+import uuid
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from ..core.message import AURCMessage, MessageBody
+from ..core.types import MessageDirection
+from ..security.message_authz import AuthzDeniedError
+
+if TYPE_CHECKING:
+    from ..bus.router import MessageRouter
 
 logger = logging.getLogger(__name__)
 
 # Type aliases / 类型别名
 SkillHandler = Callable[..., Awaitable[Any]]
 """Async function that handles a skill invocation."""
+
+# Default caller identity for bus-delegated workflow hops.
+# 总线委托工作流跳的默认调用方身份。
+DEFAULT_ORCH_SOURCE = "aurc:workflow/orchestrator:v1.0"
+
+# Active workflow-run correlation id, so every RouterDelegate hop in one pattern
+# execution shares it for audit/trace grouping. Nested patterns inherit the outer
+# scope's id rather than minting their own.
+# 当前工作流运行的 correlation_id：同一次模式执行中的每个 RouterDelegate 跳共享，
+# 用于审计与追踪分组。嵌套模式继承外层的 id，而非自行生成。
+_workflow_correlation: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "gaiaagent_workflow_correlation", default=None
+)
+
+
+def _mint_correlation_id() -> str:
+    """Mint a workflow-scope correlation id.
+
+    Mirrors the shape of ``AURCMessage.message_id`` (``msg-<hex>``) but prefixes
+    with ``wf-`` to distinguish a workflow run from a single message.
+    """
+    return f"wf-{uuid.uuid4().hex[:12]}"
+
+
+@contextmanager
+def _workflow_correlation_scope() -> Iterator[str]:
+    """Bind a correlation id for the duration of one pattern execution.
+
+    Reuses the active correlation if one is already set (nested patterns), so a
+    ``ParallelFanOut`` step inside a ``PromptChain`` shares the chain's id.
+    """
+    cid = _workflow_correlation.get() or _mint_correlation_id()
+    token = _workflow_correlation.set(cid)
+    try:
+        yield cid
+    finally:
+        _workflow_correlation.reset(token)
 
 
 @dataclass
@@ -53,6 +100,133 @@ class WorkflowResult:
     total_steps: int = 0
     errors: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+# =============================================================================
+# Bus-backed delegation / 总线委托
+# =============================================================================
+
+
+class RouterDelegateError(Exception):
+    """Raised when a bus-routed skill invocation returns an error envelope.
+
+    总线路由的技能调用返回错误信封时抛出。"""
+
+    def __init__(self, error: dict[str, Any]) -> None:
+        super().__init__(error.get("message", "skill invocation failed"))
+        self.error = error
+
+
+def _unwrap_route_outcome(outcome: Any) -> Any:
+    """Unwrap a router result envelope, raising on error envelopes.
+
+    AURCServer-registered handlers return ``{"result": ...}`` on success and
+    ``{"error": {...}}`` on failure. Plain handlers may return anything; those
+    values pass through unchanged.
+    """
+    if isinstance(outcome, dict):
+        if "error" in outcome:
+            err = outcome["error"]
+            raise RouterDelegateError(err if isinstance(err, dict) else {"message": str(err)})
+        if "result" in outcome:
+            return outcome["result"]
+    return outcome
+
+
+class RouterDelegate:
+    """A :data:`SkillHandler` backed by the AURC message bus.
+
+    一个经 AURC 消息总线支撑的 SkillHandler。
+
+    Wraps ``(router, target, skill)`` so that calling it as an async function
+    builds an :class:`AURCMessage`, routes it through
+    :meth:`MessageRouter.route`, and returns the unwrapped skill result. This
+    lets any orchestration pattern (PromptChain, ParallelFanOut,
+    Orchestrator-Workers, ...) delegate through the bus instead of calling
+    handlers directly -- so every fan-out hop is covered by hot-path
+    authorization, audit logging, correlation IDs, and bridge-chain tracing,
+    rather than bypassing the security and observability layer.
+
+    Input mapping / 输入映射:
+        - If ``input_data`` is a dict, its entries become the skill params
+          (so a prior step returning a dict flows naturally into the next).
+        - Otherwise it is passed under ``input_key`` (default ``"input"``).
+
+    Correlation / 关联:
+        - ``correlation_id`` resolves as: explicit constructor value, else the
+          active workflow scope's id (set by the enclosing pattern's
+          ``execute()``), else a per-call mint. Inside a pattern all hops share
+          one id; standalone calls still get a non-empty correlation.
+
+    The handler registered for ``target`` is expected to return an AURC
+    result envelope ``{"result": ...}`` (as ``AURCServer._invoke_skill``
+    does). An ``{"error": {...}}`` envelope is raised as
+    :class:`RouterDelegateError` so the pattern's error handling engages;
+    a hot-path authorization denial (``AuthzDeniedError``) is mapped to the
+    same ``RouterDelegateError`` with a ``forbidden`` envelope, mirroring
+    ``AURCServer.http_handler``; any other return value passes through.
+
+    Example / 示例::
+
+        from gaiaagent.workflows.orchestrator import PromptChain, RouterDelegate
+
+        # researcher is a bus-registered @aurc_agent with skill research(query)
+        research = RouterDelegate(router, "aurc:ns/researcher:v1", "research",
+                                  input_key="query")
+        summarize = RouterDelegate(router, "aurc:ns/writer:v1", "summarize",
+                                   input_key="text")
+        result = await PromptChain([research, summarize]).execute("AI agents")
+    """
+
+    def __init__(
+        self,
+        router: MessageRouter,
+        target: str,
+        skill: str,
+        *,
+        source: str = DEFAULT_ORCH_SOURCE,
+        input_key: str = "input",
+        correlation_id: str | None = None,
+    ) -> None:
+        self._router = router
+        self._target = target
+        self._skill = skill
+        self._source = source
+        self._input_key = input_key
+        self._correlation_id = correlation_id
+
+    async def __call__(self, input_data: Any) -> Any:
+        """Route ``input_data`` to the target skill and return its result.
+
+        Raises:
+            RouterDelegateError: if the routed skill returns an error envelope,
+                or if authorization denies the hop (``forbidden`` envelope).
+        """
+        params: dict[str, Any] = (
+            dict(input_data) if isinstance(input_data, dict) else {self._input_key: input_data}
+        )
+        correlation_id = (
+            self._correlation_id or _workflow_correlation.get() or _mint_correlation_id()
+        )
+        message = AURCMessage(
+            source=self._source,
+            target=self._target,
+            type=MessageDirection.REQUEST,
+            correlation_id=correlation_id,
+            body=MessageBody(method="invoke", skill=self._skill, params=params),
+        )
+        try:
+            outcome = await self._router.route(message)
+        except AuthzDeniedError as exc:
+            # Mirror AURCServer.http_handler: deny -> forbidden envelope, raised
+            # as RouterDelegateError so patterns see one failure type regardless
+            # of whether the denial came from the guard or an error envelope.
+            # / 与 AURCServer.http_handler 一致：拒绝 -> forbidden 信封，抛为
+            # RouterDelegateError，使模式无论拒绝来自守卫还是错误信封都看到统一类型。
+            raise RouterDelegateError(
+                {"code": "forbidden", "message": exc.reason, "recoverable": False}
+            ) from exc
+        return _unwrap_route_outcome(outcome)
 
 
 # =============================================================================
@@ -81,27 +255,30 @@ class PromptChain:
         current = initial_input
         errors: list[str] = []
 
-        for i, (step, name) in enumerate(zip(self._steps, self._names)):
-            try:
-                logger.info("PromptChain: executing step %d/%d (%s)", i + 1, len(self._steps), name)
-                current = await step(current)
-            except Exception as e:
-                errors.append(f"Step {name} failed: {e}")
-                return WorkflowResult(
-                    success=False,
-                    output=current,
-                    steps_completed=i,
-                    total_steps=len(self._steps),
-                    errors=errors,
-                )
+        with _workflow_correlation_scope():
+            for i, (step, name) in enumerate(zip(self._steps, self._names)):
+                try:
+                    logger.info(
+                        "PromptChain: executing step %d/%d (%s)", i + 1, len(self._steps), name
+                    )
+                    current = await step(current)
+                except Exception as e:
+                    errors.append(f"Step {name} failed: {e}")
+                    return WorkflowResult(
+                        success=False,
+                        output=current,
+                        steps_completed=i,
+                        total_steps=len(self._steps),
+                        errors=errors,
+                    )
 
-        return WorkflowResult(
-            success=True,
-            output=current,
-            steps_completed=len(self._steps),
-            total_steps=len(self._steps),
-            errors=errors,
-        )
+            return WorkflowResult(
+                success=True,
+                output=current,
+                steps_completed=len(self._steps),
+                total_steps=len(self._steps),
+                errors=errors,
+            )
 
 
 # =============================================================================
@@ -145,28 +322,31 @@ class IntelligentRouter:
                 errors=["No classifier set"],
             )
 
-        try:
-            route_name = await self._classifier(input_data)
-            handler = self._routes.get(route_name)
+        with _workflow_correlation_scope():
+            try:
+                route_name = await self._classifier(input_data)
+                handler = self._routes.get(route_name)
 
-            if not handler:
+                if not handler:
+                    return WorkflowResult(
+                        success=False,
+                        errors=[
+                            f"Unknown route: {route_name}. Available: {list(self._routes.keys())}"
+                        ],
+                    )
+
+                logger.info("Router: classified as '%s'", route_name)
+                result = await handler(input_data)
                 return WorkflowResult(
-                    success=False,
-                    errors=[f"Unknown route: {route_name}. Available: {list(self._routes.keys())}"],
+                    success=True,
+                    output=result,
+                    steps_completed=1,
+                    total_steps=1,
+                    metadata={"route": route_name},
                 )
 
-            logger.info("Router: classified as '%s'", route_name)
-            result = await handler(input_data)
-            return WorkflowResult(
-                success=True,
-                output=result,
-                steps_completed=1,
-                total_steps=1,
-                metadata={"route": route_name},
-            )
-
-        except Exception as e:
-            return WorkflowResult(success=False, errors=[str(e)])
+            except Exception as e:
+                return WorkflowResult(success=False, errors=[str(e)])
 
 
 # =============================================================================
@@ -201,14 +381,15 @@ class ParallelFanOut:
 
     async def execute(self, input_data: Any) -> WorkflowResult:
         """Execute tasks in parallel. 并行执行任务"""
-        if self._mode == "all":
-            return await self._execute_all(input_data)
-        elif self._mode == "first":
-            return await self._execute_first(input_data)
-        elif self._mode == "vote":
-            return await self._execute_vote(input_data)
-        else:
-            return WorkflowResult(success=False, errors=[f"Unknown mode: {self._mode}"])
+        with _workflow_correlation_scope():
+            if self._mode == "all":
+                return await self._execute_all(input_data)
+            elif self._mode == "first":
+                return await self._execute_first(input_data)
+            elif self._mode == "vote":
+                return await self._execute_vote(input_data)
+            else:
+                return WorkflowResult(success=False, errors=[f"Unknown mode: {self._mode}"])
 
     async def _execute_all(self, input_data: Any) -> WorkflowResult:
         """Run all tasks and collect all results."""
@@ -234,8 +415,7 @@ class ParallelFanOut:
     async def _execute_first(self, input_data: Any) -> WorkflowResult:
         """Return the first successful result."""
         tasks = [
-            asyncio.create_task(self._run_task(i, t, input_data))
-            for i, t in enumerate(self._tasks)
+            asyncio.create_task(self._run_task(i, t, input_data)) for i, t in enumerate(self._tasks)
         ]
 
         for completed in asyncio.as_completed(tasks):
@@ -245,8 +425,10 @@ class ParallelFanOut:
                 for t in tasks:
                     t.cancel()
                 return WorkflowResult(
-                    success=True, output=result,
-                    steps_completed=1, total_steps=len(self._tasks),
+                    success=True,
+                    output=result,
+                    steps_completed=1,
+                    total_steps=len(self._tasks),
                 )
             except Exception:
                 continue
@@ -261,6 +443,7 @@ class ParallelFanOut:
 
         # Simple majority vote / 简单多数投票
         from collections import Counter
+
         votes = Counter(str(r) for r in result.output)
         winner = votes.most_common(1)[0]
 
@@ -322,57 +505,58 @@ class OrchestratorWorkers:
     async def execute(self, input_data: Any) -> WorkflowResult:
         """Execute orchestrator-workers pattern. 执行编排器-工人模式"""
         try:
-            # Step 1: Orchestrator decomposes / 步骤 1: 编排器分解
-            logger.info("Orchestrator: analyzing input...")
-            subtasks = await self._orchestrator(input_data)
-            logger.info("Orchestrator: created %d subtasks", len(subtasks))
+            with _workflow_correlation_scope():
+                # Step 1: Orchestrator decomposes / 步骤 1: 编排器分解
+                logger.info("Orchestrator: analyzing input...")
+                subtasks = await self._orchestrator(input_data)
+                logger.info("Orchestrator: created %d subtasks", len(subtasks))
 
-            # Step 2: Execute subtasks in parallel with asyncio.gather
-            # / 步骤 2: 用 asyncio.gather 并行执行子任务
-            async def _run_subtask(i: int, subtask: dict[str, Any]) -> dict[str, Any] | str:
-                worker_name = subtask.get("worker", "")
-                task_input = subtask.get("task", input_data)
-                worker = self._workers.get(worker_name)
+                # Step 2: Execute subtasks in parallel with asyncio.gather
+                # / 步骤 2: 用 asyncio.gather 并行执行子任务
+                async def _run_subtask(i: int, subtask: dict[str, Any]) -> dict[str, Any] | str:
+                    worker_name = subtask.get("worker", "")
+                    task_input = subtask.get("task", input_data)
+                    worker = self._workers.get(worker_name)
 
-                if not worker:
-                    return f"Worker '{worker_name}' not found for subtask {i}"
+                    if not worker:
+                        return f"Worker '{worker_name}' not found for subtask {i}"
 
-                try:
-                    logger.info("Worker '%s': executing subtask %d", worker_name, i + 1)
-                    result = await worker(task_input)
-                    return {"worker": worker_name, "result": result}
-                except Exception as e:
-                    return f"Worker '{worker_name}' subtask {i} failed: {e}"
+                    try:
+                        logger.info("Worker '%s': executing subtask %d", worker_name, i + 1)
+                        result = await worker(task_input)
+                        return {"worker": worker_name, "result": result}
+                    except Exception as e:
+                        return f"Worker '{worker_name}' subtask {i} failed: {e}"
 
-            raw_results = await asyncio.gather(
-                *[_run_subtask(i, st) for i, st in enumerate(subtasks)]
-            )
-            results = []
-            errors = []
-            for item in raw_results:
-                if isinstance(item, str):
-                    errors.append(item)
+                raw_results = await asyncio.gather(
+                    *[_run_subtask(i, st) for i, st in enumerate(subtasks)]
+                )
+                results = []
+                errors = []
+                for item in raw_results:
+                    if isinstance(item, str):
+                        errors.append(item)
+                    else:
+                        results.append(item)
+
+                # Step 3: Synthesize results / 步骤 3: 综合结果
+                if self._synthesizer and results:
+                    logger.info("Synthesizer: combining %d results", len(results))
+                    final_output = await self._synthesizer(results)
                 else:
-                    results.append(item)
+                    final_output = results
 
-            # Step 3: Synthesize results / 步骤 3: 综合结果
-            if self._synthesizer and results:
-                logger.info("Synthesizer: combining %d results", len(results))
-                final_output = await self._synthesizer(results)
-            else:
-                final_output = results
-
-            return WorkflowResult(
-                success=len(errors) == 0,
-                output=final_output,
-                steps_completed=len(results),
-                total_steps=len(subtasks),
-                errors=errors,
-                metadata={
-                    "subtasks": len(subtasks),
-                    "workers_used": len(set(s.get("worker") for s in subtasks)),
-                },
-            )
+                return WorkflowResult(
+                    success=len(errors) == 0,
+                    output=final_output,
+                    steps_completed=len(results),
+                    total_steps=len(subtasks),
+                    errors=errors,
+                    metadata={
+                        "subtasks": len(subtasks),
+                        "workers_used": len(set(s.get("worker") for s in subtasks)),
+                    },
+                )
 
         except Exception as e:
             return WorkflowResult(success=False, errors=[f"Orchestrator failed: {e}"])
@@ -423,45 +607,48 @@ class EvaluatorOptimizer:
         iterations: list[dict[str, Any]] = []
         errors: list[str] = []
 
-        for i in range(self._max_iterations):
-            try:
-                # Generate / 生成
-                logger.info("EvaluatorOptimizer: iteration %d/%d", i + 1, self._max_iterations)
-                current_output = await self._generator(input_data, feedback)
+        with _workflow_correlation_scope():
+            for i in range(self._max_iterations):
+                try:
+                    # Generate / 生成
+                    logger.info("EvaluatorOptimizer: iteration %d/%d", i + 1, self._max_iterations)
+                    current_output = await self._generator(input_data, feedback)
 
-                # Evaluate / 评估
-                eval_result = await self._evaluator(current_output)
-                iterations.append({
-                    "iteration": i + 1,
-                    "score": eval_result.score,
-                    "passed": eval_result.passed,
-                    "feedback": eval_result.feedback,
-                })
-
-                logger.info(
-                    "EvaluatorOptimizer: score=%.2f, passed=%s",
-                    eval_result.score,
-                    eval_result.passed,
-                )
-
-                # Check if good enough / 检查是否足够好
-                if eval_result.passed or eval_result.score >= self._threshold:
-                    return WorkflowResult(
-                        success=True,
-                        output=current_output,
-                        steps_completed=i + 1,
-                        total_steps=self._max_iterations,
-                        metadata={
-                            "iterations": iterations,
-                            "final_score": eval_result.score,
-                        },
+                    # Evaluate / 评估
+                    eval_result = await self._evaluator(current_output)
+                    iterations.append(
+                        {
+                            "iteration": i + 1,
+                            "score": eval_result.score,
+                            "passed": eval_result.passed,
+                            "feedback": eval_result.feedback,
+                        }
                     )
 
-                # Prepare feedback for next iteration / 为下次迭代准备反馈
-                feedback = eval_result.feedback
+                    logger.info(
+                        "EvaluatorOptimizer: score=%.2f, passed=%s",
+                        eval_result.score,
+                        eval_result.passed,
+                    )
 
-            except Exception as e:
-                errors.append(f"Iteration {i + 1} failed: {e}")
+                    # Check if good enough / 检查是否足够好
+                    if eval_result.passed or eval_result.score >= self._threshold:
+                        return WorkflowResult(
+                            success=True,
+                            output=current_output,
+                            steps_completed=i + 1,
+                            total_steps=self._max_iterations,
+                            metadata={
+                                "iterations": iterations,
+                                "final_score": eval_result.score,
+                            },
+                        )
+
+                    # Prepare feedback for next iteration / 为下次迭代准备反馈
+                    feedback = eval_result.feedback
+
+                except Exception as e:
+                    errors.append(f"Iteration {i + 1} failed: {e}")
 
         # Max iterations reached / 达到最大迭代次数
         return WorkflowResult(
@@ -523,8 +710,12 @@ class DynamicWorkflowEngine:
         """Execute a prompt chain. 执行提示链"""
         return await PromptChain(steps, **kwargs).execute(initial_input)
 
-    async def route(self, input_data: Any, routes: dict[str, SkillHandler],
-                    classifier: Callable[[Any], Awaitable[str]]) -> WorkflowResult:
+    async def route(
+        self,
+        input_data: Any,
+        routes: dict[str, SkillHandler],
+        classifier: Callable[[Any], Awaitable[str]],
+    ) -> WorkflowResult:
         """Execute intelligent routing. 执行智能路由"""
         router = IntelligentRouter()
         for name, handler in routes.items():
@@ -532,17 +723,28 @@ class DynamicWorkflowEngine:
         router.set_classifier(classifier)
         return await router.execute(input_data)
 
-    async def parallel(self, tasks: list[SkillHandler], input_data: Any,
-                       mode: str = "all", **kwargs: Any) -> WorkflowResult:
+    async def parallel(
+        self, tasks: list[SkillHandler], input_data: Any, mode: str = "all", **kwargs: Any
+    ) -> WorkflowResult:
         """Execute parallel fan-out. 执行并行扇出"""
         return await ParallelFanOut(tasks, mode=mode, **kwargs).execute(input_data)
 
-    async def orchestrate(self, orchestrator: Callable[..., Any], workers: dict[str, SkillHandler],
-                          input_data: Any, **kwargs: Any) -> WorkflowResult:
+    async def orchestrate(
+        self,
+        orchestrator: Callable[..., Any],
+        workers: dict[str, SkillHandler],
+        input_data: Any,
+        **kwargs: Any,
+    ) -> WorkflowResult:
         """Execute orchestrator-workers pattern. 执行编排器-工人模式"""
         return await OrchestratorWorkers(orchestrator, workers, **kwargs).execute(input_data)
 
-    async def optimize(self, generator: Callable[..., Any], evaluator: Callable[..., Any],
-                       input_data: Any, **kwargs: Any) -> WorkflowResult:
+    async def optimize(
+        self,
+        generator: Callable[..., Any],
+        evaluator: Callable[..., Any],
+        input_data: Any,
+        **kwargs: Any,
+    ) -> WorkflowResult:
         """Execute evaluator-optimizer loop. 执行评估器-优化器循环"""
         return await EvaluatorOptimizer(generator, evaluator, **kwargs).execute(input_data)
