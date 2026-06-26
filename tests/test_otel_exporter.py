@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from gaiaagent.observability.tracing import BridgeTraceRecorder, TraceSpan
 from gaiaagent.observability.otel import OTelSpanExporter
+from gaiaagent.observability.tracing import BridgeTraceRecorder, TraceSpan
 
 
 def _make_span(

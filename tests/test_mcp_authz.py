@@ -13,9 +13,9 @@ import pytest
 from gaiaagent.mcp.server import AURCMCPStdioServer
 from gaiaagent.sdk.decorators import aurc_agent, skill
 from gaiaagent.security.authz import (
+    AgentPolicy,
     AuthorizationEngine,
     AuthorizationRule,
-    AgentPolicy,
     Constraint,
 )
 

@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 
 from .types import MessageDirection, Priority
 
-
 # =============================================================================
 # Message Components / 消息组件
 # =============================================================================
@@ -149,7 +148,9 @@ class MessageSecurity(BaseModel):
 class RoutingInfo(BaseModel):
     """Message routing metadata. 消息路由元数据"""
 
-    ttl_hops: int = Field(default=5, description="Maximum hops before message expires / 消息最大跳数")
+    ttl_hops: int = Field(
+        default=5, description="Maximum hops before message expires / 消息最大跳数"
+    )
     priority: Priority = Field(default=Priority.NORMAL, description="Message priority / 消息优先级")
     timeout_ms: int = Field(default=30000, description="Response timeout in ms / 响应超时毫秒")
     reply_to: str | None = Field(
@@ -190,7 +191,9 @@ class MessageBody(BaseModel):
     chunk_index: int | None = Field(default=None, description="Current chunk index / 当前块索引")
     total_chunks: int | None = Field(default=None, description="Total number of chunks / 总块数")
     data: Any = Field(default=None, description="Chunk data / 块数据")
-    is_final: bool = Field(default=False, description="Whether this is the final chunk / 是否为最后一块")
+    is_final: bool = Field(
+        default=False, description="Whether this is the final chunk / 是否为最后一块"
+    )
 
     # Capability requirements / 能力需求
     capabilities_required: list[str] = Field(
@@ -208,7 +211,9 @@ class ErrorInfo(BaseModel):
     code: str = Field(description="Error code, e.g. 'tool_not_found'")
     message: str = Field(description="Human-readable error message / 人类可读错误消息")
     details: dict[str, Any] = Field(default_factory=dict, description="Error details / 错误详情")
-    recoverable: bool = Field(default=True, description="Whether the error is recoverable / 是否可恢复")
+    recoverable: bool = Field(
+        default=True, description="Whether the error is recoverable / 是否可恢复"
+    )
     suggested_recovery: str | None = Field(
         default=None,
         description="Suggested recovery action / 建议的恢复动作",

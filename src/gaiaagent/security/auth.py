@@ -293,7 +293,8 @@ class MultiAuthenticator:
                 authenticated=False,
                 error=f"Unknown auth method: {method}",
             )
-        return authenticator.authenticate(credential)
+        result: AuthResult = authenticator.authenticate(credential)
+        return result
 
     def authenticate_any(self, credentials: dict[str, str]) -> AuthResult:
         """Try multiple authentication methods, return first success.

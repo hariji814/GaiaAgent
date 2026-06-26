@@ -7,9 +7,6 @@ import pytest
 from gaiaagent.integrations.claude import ClaudeLLM, ClaudeResponse, ClaudeTool
 from gaiaagent.integrations.codex_cli import (
     CodexMCPConfig,
-    cli_available,
-    prompt_too_long,
-    stop_reason_to_recovery_action,
     _build_argv,
     run_agentic_loop,
 )
@@ -376,7 +373,7 @@ class TestCodexCLIBackend:
 
         recorder = BridgeTraceRecorder()
         before = recorder.span_count
-        resp = await run_agentic_loop(
+        await run_agentic_loop(
             prompt="hi",
             tools=None,
             max_turns=5,

@@ -8,7 +8,6 @@ They translate between AURC's canonical message format and external protocols.
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
 from ..core.message import AURCMessage, BridgeContext, MessageBody
@@ -58,7 +57,9 @@ class ProtocolBridge(Protocol):
         """
         ...
 
-    async def map_capabilities(self, external_capabilities: list[dict]) -> list[dict]:
+    async def map_capabilities(
+        self, external_capabilities: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Map external protocol capabilities to AURC skill declarations.
         将外部协议能力映射为 AURC 技能声明
         """
@@ -158,7 +159,7 @@ class MCPBridge:
             source_protocol == "aurc/0.1" and target_protocol == self.source_protocol
         )
 
-    async def translate_to_aurc(self, mcp_message: dict) -> AURCMessage:
+    async def translate_to_aurc(self, mcp_message: dict[str, Any]) -> AURCMessage:
         """Translate an MCP JSON-RPC message to AURC format.
         将 MCP JSON-RPC 消息翻译为 AURC 格式
 
@@ -248,7 +249,7 @@ class MCPBridge:
                 correlation_id=str(msg_id) if msg_id else None,
             )
 
-    async def translate_from_aurc(self, aurc_message: AURCMessage) -> dict:
+    async def translate_from_aurc(self, aurc_message: AURCMessage) -> dict[str, Any]:
         """Translate an AURC message to MCP JSON-RPC format.
         将 AURC 消息翻译为 MCP JSON-RPC 格式
 
@@ -348,7 +349,7 @@ class MCPBridge:
             "params": {"aurc_message": aurc_message.model_dump()},
         }
 
-    async def map_capabilities(self, mcp_tools: list[dict]) -> list[dict]:
+    async def map_capabilities(self, mcp_tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Map MCP tool declarations to AURC skill declarations.
         将 MCP 工具声明映射为 AURC 技能声明
 

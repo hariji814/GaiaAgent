@@ -1,22 +1,9 @@
 """Core module — AURC identity, messaging, and capability types."""
 
-from gaiaagent.core.types import (
-    AgentState,
-    AuthMethod,
-    ContextScope,
-    HealthStatus,
-    MessageDirection,
-    Priority,
-    RecoveryAction,
-    RecoveryPolicy,
-    RecoveryStrategy,
-    ResourceLimits,
-    ResourceMetrics,
-    TransportType,
-)
+from gaiaagent.core.capability import CapabilityMatch, CapabilityMatcher
 from gaiaagent.core.identity import (
-    AURCId,
     AgentDescriptor,
+    AURCId,
     AuthDeclaration,
     Capabilities,
     InputOutputSchema,
@@ -34,7 +21,20 @@ from gaiaagent.core.message import (
     RoutingInfo,
     SessionInfo,
 )
-from gaiaagent.core.capability import CapabilityMatch, CapabilityMatcher
+from gaiaagent.core.types import (
+    AgentState,
+    AuthMethod,
+    ContextScope,
+    HealthStatus,
+    MessageDirection,
+    Priority,
+    RecoveryAction,
+    RecoveryPolicy,
+    RecoveryStrategy,
+    ResourceLimits,
+    ResourceMetrics,
+    TransportType,
+)
 
 __all__ = [
     # Types

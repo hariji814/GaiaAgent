@@ -4,10 +4,10 @@ ACP 桥接器测试 — Agent 通信协议转换
 
 import pytest
 
+from gaiaagent.bridges.a2a import A2ABridge
 from gaiaagent.bridges.acp import ACPBridge
 from gaiaagent.bridges.base import BridgeRegistry, MCPBridge
-from gaiaagent.bridges.a2a import A2ABridge
-from gaiaagent.core.message import AURCMessage, MessageBody, ErrorInfo
+from gaiaagent.core.message import AURCMessage, ErrorInfo, MessageBody
 from gaiaagent.core.types import MessageDirection
 
 

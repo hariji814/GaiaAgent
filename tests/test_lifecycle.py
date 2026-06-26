@@ -1,16 +1,21 @@
 """Tests for AURC Runtime Harness — lifecycle state machine."""
 
-import asyncio
 
 import pytest
 
 from gaiaagent.core.identity import AgentDescriptor, Capabilities, SkillDeclaration
-from gaiaagent.core.types import AgentState, HealthStatus, RecoveryPolicy, RecoveryStrategy, RecoveryAction
+from gaiaagent.core.types import (
+    AgentState,
+    HealthStatus,
+    RecoveryAction,
+    RecoveryPolicy,
+    RecoveryStrategy,
+)
 from gaiaagent.harness.lifecycle import (
+    VALID_TRANSITIONS,
     AgentInstance,
     RuntimeHarness,
     StateTransitionError,
-    VALID_TRANSITIONS,
 )
 
 
@@ -139,7 +144,7 @@ class TestRuntimeHarness:
     async def test_start_stop(self, harness):
         desc = _make_descriptor()
         await harness.register(desc)
-        handle = await harness.start("aurc:gaia/test:v1.0")
+        await harness.start("aurc:gaia/test:v1.0")
         instance = harness.get_agent("aurc:gaia/test:v1.0")
         assert instance.state == AgentState.RUNNING
 

@@ -19,21 +19,22 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-from typing import Any, Callable, TypeVar, get_type_hints
+from collections.abc import Callable
+from typing import Any, TypeVar, get_type_hints
 
 from ..core.identity import (
     AgentDescriptor,
     AuthDeclaration,
     Capabilities,
+    InputOutputSchema,
     ProtocolSupport,
     RuntimeRequirements,
     SkillDeclaration,
-    InputOutputSchema,
 )
 
 logger = logging.getLogger(__name__)
 
-F = TypeVar("F", bound=Callable)
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 # =============================================================================
@@ -84,7 +85,10 @@ def skill(
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             logger.debug("Skill '%s' invoked with params: %s", actual_skill_id, kwargs)
-            result = await func(*args, **kwargs) if inspect.iscoroutinefunction(func) else func(*args, **kwargs)
+            if inspect.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
             logger.debug("Skill '%s' completed", actual_skill_id)
             return result
 
@@ -224,7 +228,8 @@ def aurc_agent(
         # Add a helper property / 添加辅助属性
         @property  # type: ignore[misc]
         def aurc_descriptor(self: Any) -> AgentDescriptor:
-            return self.__class__._aurc_descriptor
+            desc: AgentDescriptor = self.__class__._aurc_descriptor
+            return desc
 
         cls.aurc_descriptor = aurc_descriptor  # type: ignore[attr-defined]
 
@@ -255,7 +260,7 @@ def _collect_skills(cls: type) -> list[SkillMetadata]:
     return skills
 
 
-def _extract_input_schema(func: Callable) -> InputOutputSchema:
+def _extract_input_schema(func: Callable[..., Any]) -> InputOutputSchema:
     """Extract input schema from function type hints.
     从函数类型提示中提取输入模式
     """
@@ -283,7 +288,7 @@ def _extract_input_schema(func: Callable) -> InputOutputSchema:
     )
 
 
-def _extract_output_schema(func: Callable) -> InputOutputSchema:
+def _extract_output_schema(func: Callable[..., Any]) -> InputOutputSchema:
     """Extract output schema from function return type hint."""
     hints = get_type_hints(func)
     return_type = hints.get("return", dict)

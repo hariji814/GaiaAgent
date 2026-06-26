@@ -16,6 +16,19 @@ pip install gaiaagent
 uv add gaiaagent
 ```
 
+## 0. Try the Demo (No API Key)
+
+The fastest way to understand AURC:
+
+```bash
+pip install gaiaagent[http]
+gaiaagent demo
+```
+
+This runs 3 agents (Researcher, Analyst, Writer) in a chain workflow,
+crosses MCP -> A2A -> ACP protocol boundaries, and opens a live
+dashboard in your browser. Zero configuration required.
+
 ## 1. Define Your Agent
 
 ```python

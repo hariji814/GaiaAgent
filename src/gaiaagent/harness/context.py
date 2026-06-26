@@ -65,7 +65,10 @@ class ContextStore:
         store = ContextStore()
 
         # Save context / 保存上下文
-        store.save("search_history", ["query1", "query2"], ContextScope.AGENT, "aurc:gaia/researcher:v1.0")
+        store.save(
+        "search_history", ["query1", "query2"],
+        ContextScope.AGENT, "aurc:gaia/researcher:v1.0",
+    )
 
         # Load context / 加载上下文
         history = store.load("search_history", ContextScope.AGENT, "aurc:gaia/researcher:v1.0")
@@ -200,8 +203,8 @@ class ContextStore:
         """
         if scope in (ContextScope.SESSION, ContextScope.AGENT):
             to_delete = [
-                k for k, (aid, _) in enumerate(self._store[scope].keys())
-                if aid == agent_id
+                key for key in self._store[scope]
+                if key[0] == agent_id
             ]
         else:
             to_delete = list(self._store[scope].keys())

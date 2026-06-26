@@ -19,7 +19,7 @@ FROM python:3.10-slim AS runtime
 LABEL org.opencontainers.image.title="gaiaagent"
 LABEL org.opencontainers.image.description="AURC Protocol — Agent Unified Runtime & Communication"
 LABEL org.opencontainers.image.source="https://github.com/gaiaagent/gaiaagent"
-LABEL org.opencontainers.image.license="AGPL-3.0-or-later"
+LABEL org.opencontainers.image.license="Apache-2.0"
 
 # Create non-root user
 RUN groupadd -r gaiaagent && useradd -r -g gaiaagent -d /home/gaiaagent -s /sbin/nologin gaiaagent
@@ -28,7 +28,7 @@ WORKDIR /app
 
 # Install the built wheel plus http extras
 COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl httpx uvicorn \
+RUN pip install --no-cache-dir /tmp/*.whl "gaiaagent[http,websocket,anthropic]" \
     && rm -f /tmp/*.whl
 
 # Expose dashboard / API port

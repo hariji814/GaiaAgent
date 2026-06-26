@@ -541,7 +541,7 @@ class DashboardAPI:
             await self._send_html(send, 200, html)
 
         elif path in ("/api/health", "/api/health/"):
-            data = self._dashboard.get_system_health()
+            data: dict[str, Any] | list[dict[str, Any]] | None = self._dashboard.get_system_health()
             await self._send_json(send, 200, data)
 
         elif path in ("/api/agents", "/api/agents/"):

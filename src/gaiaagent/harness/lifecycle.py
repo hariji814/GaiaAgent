@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from ..core.identity import AgentDescriptor
 from ..core.types import (
@@ -100,10 +101,11 @@ class AgentInstance:
         self.last_error: str | None = None
         self._retry_count: int = 0
         self._started_at: datetime | None = None
-        self._task_handle: asyncio.Task | None = None
+        self._task_handle: asyncio.Task[None] | None = None
         self._pause_event: asyncio.Event = asyncio.Event()
         self._pause_event.set()  # Not paused initially / 初始未暂停
         self._stop_requested: bool = False
+        self._on_transition: Callable[[AgentState, AgentState], Any] | None = None
 
     @property
     def agent_id(self) -> str:
@@ -126,7 +128,23 @@ class AgentInstance:
         """
         if not self.can_transition_to(target):
             raise StateTransitionError(self.state, target, self.agent_id)
+        self._apply_transition(target)
 
+    def reset_to_ready(self) -> None:
+        """Force-reset to READY, bypassing transition validation.
+
+        Used by restart() to recover from terminal/non-active states
+        without going through the normal state machine.
+        """
+        self._apply_transition(AgentState.READY)
+
+    def _apply_transition(self, target: AgentState) -> None:
+        """Apply a state transition, record history, and fire listeners.
+
+        This is the single place where state mutation happens.  Callers
+        that need validation go through transition_to(); callers that
+        need a force-reset (restart) go through reset_to_ready().
+        """
         old_state = self.state
         self.state = target
         now = datetime.now(timezone.utc)
@@ -145,6 +163,15 @@ class AgentInstance:
         elif target.is_terminal:
             if self._started_at:
                 self.metrics.uptime_seconds = (now - self._started_at).total_seconds()
+
+        # Fire transition listener (set by Harness.register) / 触发状态监听器
+        if self._on_transition is not None:
+            try:
+                self._on_transition(old_state, target)
+            except Exception:
+                logger.exception(
+                    "Error in transition listener for agent '%s'", self.agent_id
+                )
 
     def reset_retry(self) -> None:
         """Reset retry counter (for new tasks). 重置重试计数器"""
@@ -245,6 +272,11 @@ class RuntimeHarness:
             raise ValueError(f"Agent '{agent_id}' is already registered")
 
         instance = AgentInstance(descriptor)
+        # Wire the transition listener so the Harness fires state-change
+        # listeners on every transition, not just the ones it makes itself.
+        instance._on_transition = lambda old, new: self._fire_listeners(
+            agent_id, old, new
+        )
         self._agents[agent_id] = instance
 
         # Transition to READY / 转换到就绪状态
@@ -271,7 +303,13 @@ class RuntimeHarness:
     # Lifecycle Control / 生命周期控制
     # =========================================================================
 
-    async def start(self, agent_id: str, task_params: dict[str, Any] | None = None, *, new_task: bool = False) -> str:
+    async def start(
+        self,
+        agent_id: str,
+        task_params: dict[str, Any] | None = None,
+        *,
+        new_task: bool = False,
+    ) -> str:
         """Start an agent's task execution.
         启动 Agent 的任务执行
 
@@ -321,6 +359,17 @@ class RuntimeHarness:
         instance._pause_event.set()
         logger.info("Agent '%s' resumed", agent_id)
 
+    async def wait_if_paused(self, agent_id: str) -> None:
+        """Block until the agent is no longer paused.
+
+        If the agent is in PAUSED state, this awaits the internal
+        _pause_event (set by resume()).  This is the mechanism that
+        makes pause() *real* — loops that call this will actually
+        suspend execution until resume() is called.
+        """
+        instance = self._get_agent(agent_id)
+        await instance._pause_event.wait()
+
     async def stop(self, agent_id: str, graceful: bool = True) -> None:
         """Stop an agent.
         停止 Agent
@@ -355,18 +404,9 @@ class RuntimeHarness:
         """
         instance = self._get_agent(agent_id)
 
-        # Force to READY if in terminal state / 如果处于终态则强制回到 READY
-        if instance.state.is_terminal:
-            instance.state = AgentState.READY
-            instance._state_history.append(
-                (AgentState.READY, datetime.now(timezone.utc))
-            )
-        elif instance.state != AgentState.READY:
-            await self.stop(agent_id, graceful=False)
-            instance.state = AgentState.READY
-            instance._state_history.append(
-                (AgentState.READY, datetime.now(timezone.utc))
-            )
+        # Force to READY if in terminal or non-active state / 终态或非活跃态则强制回到 READY
+        if instance.state.is_terminal or instance.state != AgentState.READY:
+            instance.reset_to_ready()
 
         return await self.start(agent_id)
 
@@ -433,9 +473,9 @@ class RuntimeHarness:
     async def run_with_lifecycle(
         self,
         agent_id: str,
-        loop: "Callable[[], Awaitable[Any]]",
+        loop: Callable[[], Awaitable[Any]],
         *,
-        get_stop_reason: "Callable[[Any], str | None] | None" = None,
+        get_stop_reason: Callable[[Any], str | None] | None = None,
     ) -> Any:
         """Run a loop callable with full AURC lifecycle management.
 
@@ -461,6 +501,7 @@ class RuntimeHarness:
             The final loop result (from the last attempt).
         """
         await self.start(agent_id, new_task=True)
+        await self.wait_if_paused(agent_id)
         result = await loop()
 
         stop_reason = get_stop_reason(result) if get_stop_reason else None
@@ -482,6 +523,7 @@ class RuntimeHarness:
                 return result
             # Recovered -> agent is back to READY, retry the loop
             await self.start(agent_id)
+            await self.wait_if_paused(agent_id)
             result = await loop()
             stop_reason = get_stop_reason(result) if get_stop_reason else None
 
@@ -522,6 +564,28 @@ class RuntimeHarness:
     def remove_listener(self, listener: StateListener) -> None:
         """Remove a state change listener."""
         self._listeners.remove(listener)
+
+    def _fire_listeners(
+        self, agent_id: str, old_state: AgentState, new_state: AgentState
+    ) -> None:
+        """Fire-and-forget: schedule async listeners, call sync ones directly.
+
+        Unlike _notify_listeners (which is async and awaits each listener),
+        this method is synchronous and returns immediately.  Async listeners
+        are scheduled as tasks on the running event loop (if any); sync
+        listeners are called inline.  This makes it safe to call from
+        AgentInstance._apply_transition without deadlocking.
+        """
+        for listener in self._listeners:
+            try:
+                result = listener(agent_id, old_state, new_state)
+                if asyncio.iscoroutine(result):
+                    loop = asyncio.get_event_loop()
+                    loop.create_task(result)
+            except Exception:
+                logger.exception(
+                    "Error in state listener for agent '%s'", agent_id
+                )
 
     async def _notify_listeners(
         self, agent_id: str, old_state: AgentState, new_state: AgentState

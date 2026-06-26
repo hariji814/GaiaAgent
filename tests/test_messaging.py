@@ -1,6 +1,5 @@
 """Tests for AURC messaging — message creation, responses, and streaming."""
 
-import pytest
 
 from gaiaagent.core.message import (
     AURCMessage,
@@ -9,7 +8,6 @@ from gaiaagent.core.message import (
     ErrorInfo,
     MessageBody,
     MessageSecurity,
-    SessionInfo,
 )
 from gaiaagent.core.types import MessageDirection
 

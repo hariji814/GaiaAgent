@@ -2,12 +2,11 @@
 WebSocket 传输测试 — 实时双向消息
 """
 
-import pytest
 
 from gaiaagent.transport.websocket import (
-    WebSocketTransportServer,
     WebSocketTransportClient,
     WebSocketTransportError,
+    WebSocketTransportServer,
 )
 
 

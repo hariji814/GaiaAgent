@@ -2,8 +2,8 @@
 
 import pytest
 
-from gaiaagent.bridges.base import MCPBridge, BridgeRegistry
 from gaiaagent.bridges.a2a import A2ABridge
+from gaiaagent.bridges.base import BridgeRegistry, MCPBridge
 from gaiaagent.core.message import AURCMessage, MessageBody
 from gaiaagent.core.types import MessageDirection
 

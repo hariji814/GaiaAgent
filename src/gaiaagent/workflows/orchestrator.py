@@ -32,12 +32,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Awaitable
-
-from ..core.message import AURCMessage, MessageBody
-from ..core.types import MessageDirection
-from ..bus.router import MessageRouter
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +233,10 @@ class ParallelFanOut:
 
     async def _execute_first(self, input_data: Any) -> WorkflowResult:
         """Return the first successful result."""
-        tasks = [asyncio.create_task(self._run_task(i, t, input_data)) for i, t in enumerate(self._tasks)]
+        tasks = [
+            asyncio.create_task(self._run_task(i, t, input_data))
+            for i, t in enumerate(self._tasks)
+        ]
 
         for completed in asyncio.as_completed(tasks):
             try:
@@ -244,7 +244,10 @@ class ParallelFanOut:
                 # Cancel remaining tasks / 取消剩余任务
                 for t in tasks:
                     t.cancel()
-                return WorkflowResult(success=True, output=result, steps_completed=1, total_steps=len(self._tasks))
+                return WorkflowResult(
+                    success=True, output=result,
+                    steps_completed=1, total_steps=len(self._tasks),
+                )
             except Exception:
                 continue
 
@@ -301,7 +304,7 @@ class OrchestratorWorkers:
 
     def __init__(
         self,
-        orchestrator: Callable[[Any], Awaitable[list[dict]]],
+        orchestrator: Callable[[Any], Awaitable[list[dict[str, Any]]]],
         workers: dict[str, SkillHandler],
         synthesizer: Callable[[list[Any]], Awaitable[Any]] | None = None,
     ) -> None:
@@ -324,24 +327,33 @@ class OrchestratorWorkers:
             subtasks = await self._orchestrator(input_data)
             logger.info("Orchestrator: created %d subtasks", len(subtasks))
 
-            # Step 2: Execute subtasks (parallel where possible) / 步骤 2: 执行子任务
-            results = []
-            errors = []
-            for i, subtask in enumerate(subtasks):
+            # Step 2: Execute subtasks in parallel with asyncio.gather
+            # / 步骤 2: 用 asyncio.gather 并行执行子任务
+            async def _run_subtask(i: int, subtask: dict[str, Any]) -> dict[str, Any] | str:
                 worker_name = subtask.get("worker", "")
                 task_input = subtask.get("task", input_data)
                 worker = self._workers.get(worker_name)
 
                 if not worker:
-                    errors.append(f"Worker '{worker_name}' not found for subtask {i}")
-                    continue
+                    return f"Worker '{worker_name}' not found for subtask {i}"
 
                 try:
                     logger.info("Worker '%s': executing subtask %d", worker_name, i + 1)
                     result = await worker(task_input)
-                    results.append({"worker": worker_name, "result": result})
+                    return {"worker": worker_name, "result": result}
                 except Exception as e:
-                    errors.append(f"Worker '{worker_name}' subtask {i} failed: {e}")
+                    return f"Worker '{worker_name}' subtask {i} failed: {e}"
+
+            raw_results = await asyncio.gather(
+                *[_run_subtask(i, st) for i, st in enumerate(subtasks)]
+            )
+            results = []
+            errors = []
+            for item in raw_results:
+                if isinstance(item, str):
+                    errors.append(item)
+                else:
+                    results.append(item)
 
             # Step 3: Synthesize results / 步骤 3: 综合结果
             if self._synthesizer and results:
@@ -356,7 +368,10 @@ class OrchestratorWorkers:
                 steps_completed=len(results),
                 total_steps=len(subtasks),
                 errors=errors,
-                metadata={"subtasks": len(subtasks), "workers_used": len(set(s.get("worker") for s in subtasks))},
+                metadata={
+                    "subtasks": len(subtasks),
+                    "workers_used": len(set(s.get("worker") for s in subtasks)),
+                },
             )
 
         except Exception as e:
@@ -405,7 +420,7 @@ class EvaluatorOptimizer:
         """Execute evaluator-optimizer loop. 执行评估器-优化器循环"""
         current_output = None
         feedback: str | None = None
-        iterations: list[dict] = []
+        iterations: list[dict[str, Any]] = []
         errors: list[str] = []
 
         for i in range(self._max_iterations):
@@ -502,7 +517,9 @@ class DynamicWorkflowEngine:
         )
     """
 
-    async def chain(self, steps: list[SkillHandler], initial_input: Any, **kwargs: Any) -> WorkflowResult:
+    async def chain(
+        self, steps: list[SkillHandler], initial_input: Any, **kwargs: Any
+    ) -> WorkflowResult:
         """Execute a prompt chain. 执行提示链"""
         return await PromptChain(steps, **kwargs).execute(initial_input)
 
@@ -520,12 +537,12 @@ class DynamicWorkflowEngine:
         """Execute parallel fan-out. 执行并行扇出"""
         return await ParallelFanOut(tasks, mode=mode, **kwargs).execute(input_data)
 
-    async def orchestrate(self, orchestrator: Callable, workers: dict[str, SkillHandler],
+    async def orchestrate(self, orchestrator: Callable[..., Any], workers: dict[str, SkillHandler],
                           input_data: Any, **kwargs: Any) -> WorkflowResult:
         """Execute orchestrator-workers pattern. 执行编排器-工人模式"""
         return await OrchestratorWorkers(orchestrator, workers, **kwargs).execute(input_data)
 
-    async def optimize(self, generator: Callable, evaluator: Callable,
+    async def optimize(self, generator: Callable[..., Any], evaluator: Callable[..., Any],
                        input_data: Any, **kwargs: Any) -> WorkflowResult:
         """Execute evaluator-optimizer loop. 执行评估器-优化器循环"""
         return await EvaluatorOptimizer(generator, evaluator, **kwargs).execute(input_data)

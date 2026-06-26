@@ -6,8 +6,6 @@ and that is_loop_backend validation works.
 
 from __future__ import annotations
 
-import pytest
-
 from gaiaagent.integrations.base import LoopBackend
 
 
@@ -54,16 +52,16 @@ def test_prompt_too_long_returns_bool():
 
 
 def test_stop_reason_to_recovery_action_returns_none_for_end_turn():
-    from gaiaagent.integrations import claude_cli
     from gaiaagent.core.types import RecoveryAction
+    from gaiaagent.integrations import claude_cli
     assert claude_cli.stop_reason_to_recovery_action("end_turn") is None
     result = claude_cli.stop_reason_to_recovery_action("max_turns")
     assert result == RecoveryAction.COMPACT_AND_RETRY
 
 
 def test_codex_stop_reason_to_recovery_action_returns_none_for_end_turn():
-    from gaiaagent.integrations import codex_cli
     from gaiaagent.core.types import RecoveryAction
+    from gaiaagent.integrations import codex_cli
     assert codex_cli.stop_reason_to_recovery_action("end_turn") is None
     result = codex_cli.stop_reason_to_recovery_action("error")
     assert result == RecoveryAction.RETRY_WITH_BACKOFF

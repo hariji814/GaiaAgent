@@ -82,7 +82,7 @@ class ACPBridge:
     # External → AURC / 外部协议 → AURC
     # -------------------------------------------------------------------------
 
-    async def translate_to_aurc(self, acp_message: dict) -> AURCMessage:
+    async def translate_to_aurc(self, acp_message: dict[str, Any]) -> AURCMessage:
         """Translate an ACP message to AURC format.
         将 ACP 消息翻译为 AURC 格式
 
@@ -223,7 +223,7 @@ class ACPBridge:
     # AURC → External / AURC → 外部协议
     # -------------------------------------------------------------------------
 
-    async def translate_from_aurc(self, aurc_message: AURCMessage) -> dict:
+    async def translate_from_aurc(self, aurc_message: AURCMessage) -> dict[str, Any]:
         """Translate an AURC message to ACP format.
         将 AURC 消息翻译为 ACP 格式
 
@@ -333,7 +333,7 @@ class ACPBridge:
     # Capability Mapping / 能力映射
     # -------------------------------------------------------------------------
 
-    async def map_capabilities(self, acp_skills: list[dict]) -> list[dict]:
+    async def map_capabilities(self, acp_skills: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Map ACP agent skills to AURC skill declarations.
         将 ACP Agent 技能映射为 AURC 技能声明
 
@@ -360,7 +360,7 @@ class ACPBridge:
     # Agent Descriptor Mapping / Agent 描述符映射
     # -------------------------------------------------------------------------
 
-    def map_agent_card(self, agent_descriptor: dict) -> dict:
+    def map_agent_card(self, agent_descriptor: dict[str, Any]) -> dict[str, Any]:
         """Convert an ACP agent descriptor to an AURC Agent Descriptor dict.
         将 ACP Agent 描述符转换为 AURC Agent Descriptor 字典
 

@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "AURC Protocol — Agent Unified Runtime & Communication. A bridging protocol for AI agent interoperability with runtime lifecycle management."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "AGPL-3.0-or-later"
+license = "Apache-2.0"
 authors = [{ name = "GaiaAgent Team" }]
 keywords = ["ai", "agent", "protocol", "mcp", "a2a", "bridge", "harness", "interoperability"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -50,6 +50,7 @@ all = [
 
 [project.scripts]
 aurc = "gaiaagent.cli:main"
+gaiaagent = "gaiaagent.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/gaiaagent/gaiaagent"

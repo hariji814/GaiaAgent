@@ -194,7 +194,9 @@ class RuntimeRequirements(BaseModel):
 
     min_memory_mb: int = Field(default=256, description="Minimum memory in MB / 最小内存 MB")
     max_concurrency: int = Field(default=10, description="Maximum concurrent tasks / 最大并发数")
-    supports_streaming: bool = Field(default=True, description="Supports streaming responses / 支持流式响应")
+    supports_streaming: bool = Field(
+        default=True, description="Supports streaming responses / 支持流式响应"
+    )
     supports_pause: bool = Field(default=False, description="Supports pause/resume / 支持暂停恢复")
     timeout_seconds: int = Field(default=3600, description="Default task timeout / 默认任务超时")
 
@@ -250,7 +252,7 @@ class AgentDescriptor(BaseModel):
     description: str = Field(default="", description="Agent description / Agent 描述")
     version: str = Field(default="0.1.0", description="Agent software version / Agent 软件版本")
     author: str = Field(default="", description="Agent author / Agent 作者")
-    license: str = Field(default="AGPL-3.0", description="License / 许可证")
+    license: str = Field(default="Apache-2.0", description="License / 许可证")
 
     # Capabilities / 能力
     capabilities: Capabilities = Field(default_factory=Capabilities)

@@ -12,12 +12,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Type for message handlers / 消息处理函数类型
-WebSocketMessageHandler = Callable[[dict], Awaitable[dict | None]]
+WebSocketMessageHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]]
 
 
 class WebSocketTransportError(Exception):
@@ -73,7 +74,7 @@ class WebSocketTransportServer:
                                      如果 websockets 库未安装。
         """
         try:
-            from websockets import serve
+            from websockets import serve  # type: ignore[import-not-found]
         except ImportError:
             logger.error(
                 "websockets not installed. Install with: pip install gaiaagent[websocket]"
@@ -128,7 +129,7 @@ class WebSocketTransportServer:
 
         logger.info("WebSocket transport server stopped")
 
-    async def broadcast(self, message_dict: dict) -> None:
+    async def broadcast(self, message_dict: dict[str, Any]) -> None:
         """Send a message to all connected clients. 向所有已连接客户端发送消息
 
         Args:
@@ -161,7 +162,7 @@ class WebSocketTransportServer:
         """Number of currently connected clients. 当前已连接客户端数量"""
         return len(self._clients)
 
-    def _create_handler(self) -> Callable:
+    def _create_handler(self) -> Callable[..., Any]:
         """Create the WebSocket connection handler. 创建 WebSocket 连接处理函数
 
         Returns:
@@ -222,7 +223,8 @@ class WebSocketTransportServer:
                         }, default=str))
 
             except Exception as e:
-                # websockets raises ConnectionClosed or similar / websockets 抛出 ConnectionClosed 等
+                # websockets raises ConnectionClosed or similar
+                # websockets 抛出 ConnectionClosed 等
                 logger.info("Client disconnected: %s (%s)", remote, e)
             finally:
                 server_ref._clients.discard(websocket)
@@ -232,7 +234,7 @@ class WebSocketTransportServer:
 
     @staticmethod
     async def _safe_send(
-        ws: Any, data: str, disconnected: list
+        ws: Any, data: str, disconnected: list[Any]
     ) -> None:
         """Send data to a WebSocket, tracking failures. 向 WebSocket 发送数据，跟踪失败
 
@@ -298,7 +300,7 @@ class WebSocketTransportClient:
         self._max_reconnect_delay = max_reconnect_delay
         self._ws: Any = None  # websockets.ClientConnection / websockets 客户端连接
         self._connected = False
-        self._listener_task: asyncio.Task | None = None
+        self._listener_task: asyncio.Task[None] | None = None
         self._closing = False  # Flag to prevent reconnection during close / 关闭时阻止重连的标志
 
     async def connect(self) -> None:
@@ -339,7 +341,7 @@ class WebSocketTransportClient:
                 f"Failed to connect to {self._url}: {e}"
             ) from e
 
-    async def send(self, message_dict: dict) -> None:
+    async def send(self, message_dict: dict[str, Any]) -> None:
         """Send a message over the WebSocket connection.
         通过 WebSocket 连接发送消息
 
@@ -362,7 +364,7 @@ class WebSocketTransportClient:
             self._connected = False
             raise WebSocketTransportError(f"Failed to send message: {e}") from e
 
-    async def receive(self) -> dict:
+    async def receive(self) -> dict[str, Any]:
         """Receive the next message from the WebSocket connection.
         从 WebSocket 连接接收下一条消息
 
@@ -381,7 +383,8 @@ class WebSocketTransportClient:
 
         try:
             raw = await self._ws.recv()
-            return json.loads(raw)
+            result: dict[str, Any] = json.loads(raw)
+            return result
         except Exception as e:
             self._connected = False
             raise WebSocketTransportError(f"Failed to receive message: {e}") from e

@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import defaultdict
-from typing import Any, Callable, Awaitable
+from collections import defaultdict, deque
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from ..core.message import AURCMessage
-from ..core.types import MessageDirection
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class MessageRouter:
         self._subscriptions: dict[str, list[MessageHandler]] = defaultdict(list)
 
         # Message queue for undeliverable messages / 不可投递消息队列
-        self._dead_letter_queue: list[AURCMessage] = []
+        self._dead_letter_queue: deque[AURCMessage] = deque()
         self._max_dead_letters = 100
 
         # Statistics / 统计
@@ -97,7 +97,8 @@ class MessageRouter:
 
         Args:
             protocol: External protocol identifier / 外部协议标识
-            forwarder: Async function to forward messages to external protocol / 转发到外部协议的异步函数
+            forwarder: Async function to forward messages to external protocol
+                / 转发到外部协议的异步函数
         """
         self._bridge_forwarders[protocol] = forwarder
         logger.info("Router: registered bridge forwarder for '%s'", protocol)
@@ -144,6 +145,8 @@ class MessageRouter:
             logger.warning("Message '%s' TTL expired, dropping", message.message_id)
             self._stats.dropped += 1
             return None
+        # Decrement TTL for this hop / 递减 TTL
+        message.routing.ttl_hops -= 1
 
         target = message.target
         self._stats.total_routed += 1
@@ -182,13 +185,17 @@ class MessageRouter:
                 "Broadcast route: %s → %s (%d subscribers)",
                 message.source, target, len(handlers),
             )
+            coros = [handler(message) for handler in handlers]
+            gathered = await asyncio.gather(*coros, return_exceptions=True)
             results = []
-            for handler in handlers:
-                try:
-                    results.append(await handler(message))
-                except Exception:
-                    logger.exception("Broadcast handler error in group '%s'", target)
+            for item in gathered:
+                if isinstance(item, Exception):
+                    logger.exception(
+                        "Broadcast handler error in group '%s': %s", target, item
+                    )
                     self._stats.errors += 1
+                else:
+                    results.append(item)
             return results
 
         # 4. Wildcard routing / 通配符路由
@@ -206,7 +213,7 @@ class MessageRouter:
         self._dead_letter_queue.append(message)
         self._stats.dead_lettered += 1
         if len(self._dead_letter_queue) > self._max_dead_letters:
-            self._dead_letter_queue.pop(0)
+            self._dead_letter_queue.popleft()
         return None
 
     # =========================================================================

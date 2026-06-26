@@ -2,13 +2,15 @@
 
 import pytest
 
-from gaiaagent.harness.context import ContextStore, ContextEntry
-from gaiaagent.core.types import ContextScope
-from gaiaagent.registry.local import LocalRegistry
 from gaiaagent.core.identity import (
-    AgentDescriptor, Capabilities, SkillDeclaration, ProtocolSupport,
+    AgentDescriptor,
+    Capabilities,
+    ProtocolSupport,
+    SkillDeclaration,
 )
-
+from gaiaagent.core.types import ContextScope
+from gaiaagent.harness.context import ContextStore
+from gaiaagent.registry.local import LocalRegistry
 
 # =============================================================================
 # ContextStore Tests / 上下文存储测试
@@ -111,7 +113,11 @@ class TestContextStore:
 # =============================================================================
 
 
-def _make_descriptor(agent_id: str, skills: list[str] | None = None, tags: list[str] | None = None) -> AgentDescriptor:
+def _make_descriptor(
+    agent_id: str,
+    skills: list[str] | None = None,
+    tags: list[str] | None = None,
+) -> AgentDescriptor:
     return AgentDescriptor(
         aurc_id=agent_id,
         display_name=f"Agent {agent_id}",
@@ -166,7 +172,9 @@ class TestLocalRegistry:
         assert len(registry.list_all()) == 2
 
     def test_find_by_skills(self, registry):
-        registry.register(_make_descriptor("aurc:gaia/researcher:v1.0", skills=["research", "summarize"]))
+        registry.register(
+            _make_descriptor("aurc:gaia/researcher:v1.0", skills=["research", "summarize"])
+        )
         registry.register(_make_descriptor("aurc:gaia/coder:v1.0", skills=["code", "debug"]))
         matches = registry.find_by_skills(["research"])
         assert len(matches) >= 1

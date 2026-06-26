@@ -2,8 +2,8 @@
 
 import pytest
 
-from gaiaagent.bus.router import MessageRouter, RouterStats
-from gaiaagent.bus.session import SessionManager, SessionState
+from gaiaagent.bus.router import MessageRouter
+from gaiaagent.bus.session import SessionManager
 from gaiaagent.core.message import AURCMessage, MessageBody
 from gaiaagent.core.types import MessageDirection
 
@@ -114,7 +114,7 @@ class TestMessageRouter:
             target="aurc:group/researchers",
             type=MessageDirection.NOTIFICATION,
         )
-        results = await router.route(msg)
+        await router.route(msg)
         assert len(received_a) == 1
         assert len(received_b) == 1
         assert router.stats.broadcast == 1
@@ -167,22 +167,22 @@ class TestSessionManager:
         assert manager.get_context(session.session_id, "missing", "default") == "default"
 
     def test_conversation_grouping(self, manager):
-        s1 = manager.create_session("aurc:gaia/a:v1.0", conversation_id="conv-123")
-        s2 = manager.create_session("aurc:gaia/b:v1.0", conversation_id="conv-123")
+        manager.create_session("aurc:gaia/a:v1.0", conversation_id="conv-123")
+        manager.create_session("aurc:gaia/b:v1.0", conversation_id="conv-123")
         sessions = manager.get_conversation_sessions("conv-123")
         assert len(sessions) == 2
 
     def test_get_sessions_by_participant(self, manager):
-        s1 = manager.create_session("aurc:gaia/a:v1.0")
-        s1.add_participant("aurc:gaia/b:v1.0")
-        s2 = manager.create_session("aurc:gaia/c:v1.0")
+        sess1 = manager.create_session("aurc:gaia/a:v1.0")
+        sess1.add_participant("aurc:gaia/b:v1.0")
+        manager.create_session("aurc:gaia/c:v1.0")
 
         b_sessions = manager.get_sessions_by_participant("aurc:gaia/b:v1.0")
         assert len(b_sessions) == 1
-        assert b_sessions[0].session_id == s1.session_id
+        assert b_sessions[0].session_id == sess1.session_id
 
     def test_cleanup_stale(self, manager):
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         s1 = manager.create_session("aurc:gaia/test:v1.0")
         manager.close_session(s1.session_id)

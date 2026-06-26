@@ -5,7 +5,7 @@
 > 🌐 [中文版](PROTOCOL.zh.md)
 > **[← Back to README](README.md)** | [Architecture](docs/en/architecture.md) | [API Reference](docs/en/api-reference.md) | [Quick Start](docs/en/guides/quickstart.md)
 >
-> Status: Draft
+> Status: Stable (v0.1 frozen)
 > Version: 0.1.0
 > License: CC BY-SA 4.0 (specification) / AGPL-3.0 (implementation)
 

@@ -49,11 +49,12 @@ Usage / 用法:
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Awaitable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,9 @@ class ClaudeTool:
         }
 
     @classmethod
-    def from_aurc_skill(cls, skill_declaration: Any, handler: Callable | None = None) -> ClaudeTool:
+    def from_aurc_skill(
+        cls, skill_declaration: Any, handler: Callable[..., Any] | None = None
+    ) -> ClaudeTool:
         """Create a ClaudeTool from an AURC SkillDeclaration.
         从 AURC SkillDeclaration 创建 ClaudeTool
         """
@@ -236,7 +239,7 @@ class ClaudeLLM:
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self._max_tokens = max_tokens
         self._system_prompt = system_prompt
-        self._conversation_history: list[dict] = []
+        self._conversation_history: list[dict[str, Any]] = []
         # Claude Code CLI backend config (Loop Roadmap Step 2). When the `claude`
         # CLI is on PATH, `agentic_loop` delegates to it; otherwise the built-in
         # hand-rolled loop is used. These fields are pass-through CLI flags /
@@ -285,7 +288,7 @@ class ClaudeLLM:
             ClaudeResponse with text and/or tool calls
         """
         try:
-            import anthropic
+            import anthropic  # type: ignore[import-not-found]
 
             client = anthropic.AsyncAnthropic(api_key=self._api_key)
 
@@ -485,11 +488,12 @@ class ClaudeLLM:
                 correlation_id=correlation_id,
             )
 
-        return await harness.run_with_lifecycle(
+        result: ClaudeResponse = await harness.run_with_lifecycle(
             agent_id,
             _loop,
             get_stop_reason=_extract_stop_reason,
         )
+        return result
 
     async def _execute_tool(
         self, tool: ClaudeTool | None, tool_input: dict[str, Any]
@@ -526,7 +530,7 @@ class ClaudeLLM:
 
             client = anthropic.AsyncAnthropic(api_key=self._api_key)
 
-            messages: list[dict] = [{"role": "user", "content": prompt}]
+            messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
             tool_map = {t.name: t for t in (tools or [])}
 
             kwargs: dict[str, Any] = {
@@ -726,7 +730,10 @@ class ClaudeAgent:
         Override this to customize which skills are exposed to Claude.
         """
         tools = []
-        descriptor = getattr(self, "aurc_descriptor", None) or getattr(self.__class__, "_aurc_descriptor", None)
+        descriptor = (
+            getattr(self, "aurc_descriptor", None)
+            or getattr(self.__class__, "_aurc_descriptor", None)
+        )
         if descriptor:
             for skill_decl in descriptor.capabilities.provides:
                 handler = getattr(self, skill_decl.skill_id.replace("-", "_"), None)

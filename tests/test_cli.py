@@ -2,11 +2,12 @@
 CLI 工具测试 — aurc 命令行界面
 """
 
-import pytest
-import sys
 import json
-import tempfile
 import os
+import sys
+import tempfile
+
+import pytest
 
 
 class TestCLIVersion:

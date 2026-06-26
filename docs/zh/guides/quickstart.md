@@ -16,6 +16,19 @@ pip install gaiaagent
 uv add gaiaagent
 ```
 
+## 0. 体验 Demo（无需 API Key）
+
+最快了解 AURC 的方式：
+
+```bash
+pip install gaiaagent[http]
+gaiaagent demo
+```
+
+这会运行 3 个 Agent（研究员、分析师、作家）的链式工作流，
+跨越 MCP -> A2A -> ACP 协议边界，并在浏览器中打开实时仪表盘。
+零配置即可运行。
+
 ## 1. 定义你的 Agent
 
 ```python

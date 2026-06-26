@@ -4,10 +4,10 @@
 
 import pytest
 
-from gaiaagent.harness.lifecycle import RuntimeHarness
-from gaiaagent.security.audit import AuditLog, AuditAction, AuditSeverity
-from gaiaagent.observability.dashboard import HealthDashboard, DashboardAPI
 from gaiaagent.core.identity import AgentDescriptor
+from gaiaagent.harness.lifecycle import RuntimeHarness
+from gaiaagent.observability.dashboard import DashboardAPI, HealthDashboard
+from gaiaagent.security.audit import AuditAction, AuditLog
 
 
 class TestHealthDashboard:

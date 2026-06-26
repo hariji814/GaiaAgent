@@ -6,10 +6,8 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # =============================================================================
 # Enums / 枚举
@@ -133,8 +131,12 @@ class ResourceLimits(BaseModel):
     """Resource limits for an agent. Agent 资源限制"""
 
     max_memory_mb: int = Field(default=1024, description="Maximum memory in MB / 最大内存 MB")
-    max_cpu_percent: float = Field(default=100.0, description="Maximum CPU percentage / 最大 CPU 百分比")
-    max_concurrency: int = Field(default=10, description="Maximum concurrent tasks / 最大并发任务数")
+    max_cpu_percent: float = Field(
+        default=100.0, description="Maximum CPU percentage / 最大 CPU 百分比"
+    )
+    max_concurrency: int = Field(
+        default=10, description="Maximum concurrent tasks / 最大并发任务数"
+    )
     timeout_seconds: int = Field(default=3600, description="Task timeout in seconds / 任务超时秒数")
 
 
@@ -174,7 +176,9 @@ class RecoveryPolicy(BaseModel):
 class RecoveryStrategy(BaseModel):
     """A single recovery strategy rule. 单条恢复策略规则"""
 
-    trigger: str = Field(description="Error type that triggers this strategy / 触发此策略的错误类型")
+    trigger: str = Field(
+        description="Error type that triggers this strategy / 触发此策略的错误类型"
+    )
     action: RecoveryAction = Field(description="Action to take / 执行的动作")
     alternatives: list[str] = Field(
         default_factory=list,

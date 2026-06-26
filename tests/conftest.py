@@ -5,10 +5,10 @@ import pytest
 from gaiaagent.core.identity import (
     AgentDescriptor,
     Capabilities,
+    InputOutputSchema,
     ProtocolSupport,
     RuntimeRequirements,
     SkillDeclaration,
-    InputOutputSchema,
 )
 
 

@@ -49,9 +49,10 @@ import logging
 import os
 import shutil
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from .claude import ClaudeResponse, ClaudeTool, ClaudeToolCall
 
@@ -64,9 +65,9 @@ try:
     from gaiaagent.core.types import RecoveryAction
     from gaiaagent.observability.tracing import BridgeTraceRecorder, TraceSpan
 except ImportError:  # pragma: no cover - observability is part of the core package
-    RecoveryAction = None  # type: ignore[assignment]
-    BridgeTraceRecorder = None  # type: ignore[assignment]
-    TraceSpan = None  # type: ignore[assignment]
+    RecoveryAction = None  # type: ignore
+    BridgeTraceRecorder = None  # type: ignore
+    TraceSpan = None  # type: ignore
 
 # Ceiling on prompt length passed as a CLI *argument*. Windows CreateProcess
 # caps the whole command line near 32 KiB; we stay well under and force the
@@ -204,7 +205,9 @@ def _build_argv(  # noqa: PLR0913 - CLI flag assembly, one arg per flag
     return argv
 
 
-async def _spawn(argv: list[str], env: dict[str, str], cwd: str | None) -> asyncio.subprocess.Process:
+async def _spawn(
+    argv: list[str], env: dict[str, str], cwd: str | None
+) -> asyncio.subprocess.Process:
     """Spawn the CLI subprocess. Separated for testability (monkeypatch this).
 
     启动 CLI 子进程。单独抽出便于测试(monkeypatch)

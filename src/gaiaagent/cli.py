@@ -28,7 +28,6 @@ from typing import Any
 
 from gaiaagent import __version__
 
-
 # =============================================================================
 # Status indicators / 状态指示符
 # =============================================================================
@@ -296,7 +295,7 @@ def _cmd_bridge_test(args: argparse.Namespace) -> int:
 
     # Select bridge and sample message / 选择桥接器和示例消息
     if protocol == "mcp":
-        bridge = MCPBridge()
+        bridge: MCPBridge | A2ABridge | ACPBridge = MCPBridge()
         sample = _SAMPLE_MCP_MESSAGE
     elif protocol == "a2a":
         bridge = A2ABridge()
@@ -415,11 +414,41 @@ def _cmd_registry_export(args: argparse.Namespace) -> int:
         if count == 0:
             _print(f"{_OK} Registry exported: 0 entries (empty registry)", quiet)
             _print(f"  {_ARROW} No agents are currently registered.", quiet)
-            _print(f"  {_ARROW} Start a server and register agents to populate the registry.", quiet)
+            _print(f"  {_ARROW} Start a server and register agents to populate registry.", quiet)
         else:
             _print(f"{_OK} Registry exported: {count} entries / 导出 {count} 个条目", quiet)
         # Always print JSON to stdout for piping / 始终输出 JSON 以便管道使用
         print(json.dumps(data, indent=2, default=str))
+
+    return 0
+
+
+# =============================================================================
+# Command: demo / 演示
+# =============================================================================
+
+
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """Run the AURC demo - 3 agents, cross-protocol chain, live dashboard.
+    运行 AURC 演示 - 3 个 Agent，跨协议链，实时仪表盘
+    """
+    from gaiaagent.demo import run_demo
+
+    quiet = args.quiet
+    if not quiet:
+        print("Starting AURC demo...")
+
+    try:
+        asyncio.run(run_demo(
+            host=args.host,
+            port=args.port,
+            open_browser=not args.no_browser,
+        ))
+    except KeyboardInterrupt:
+        _print(f"\n{_OK} Demo stopped.  演示已停止", quiet)
+    except Exception as exc:
+        _error(f"Demo failed: {exc}")
+        return 1
 
     return 0
 
@@ -476,6 +505,30 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Enable health dashboard / 启用健康仪表盘",
+    )
+
+    # --- demo ---
+    p_demo = subparsers.add_parser(
+        "demo",
+        parents=[parent],
+        help="Run the AURC demo (3 agents, cross-protocol, no API key) / 运行 AURC 演示",
+    )
+    p_demo.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Dashboard host (default: 127.0.0.1) / 仪表盘主机",
+    )
+    p_demo.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Dashboard port (default: 8080) / 仪表盘端口",
+    )
+    p_demo.add_argument(
+        "--no-browser",
+        action="store_true",
+        default=False,
+        help="Do not auto-open the browser / 不自动打开浏览器",
     )
 
     # --- version ---
@@ -567,6 +620,7 @@ def main() -> None:
     # Command dispatch / 命令分派
     handlers: dict[str, Any] = {
         "serve": _cmd_serve,
+        "demo": _cmd_demo,
         "version": _cmd_version,
         "info": _cmd_info,
         "validate": _cmd_validate,

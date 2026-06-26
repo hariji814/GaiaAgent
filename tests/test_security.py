@@ -1,31 +1,26 @@
 """Tests for AURC Security — Auth, CapABAC, Delegation, Audit."""
 
-import time
 
 import pytest
 
+from gaiaagent.core.message import DelegationHop, MessageSecurity
+from gaiaagent.security.audit import AuditAction, AuditLog, AuditSeverity
 from gaiaagent.security.auth import (
     APIKeyAuthenticator,
     JWTAuthenticator,
     MultiAuthenticator,
 )
 from gaiaagent.security.authz import (
-    AuthorizationEngine,
     AgentPolicy,
+    AuthorizationEngine,
     AuthorizationRule,
     Constraint,
-    DelegationPolicy,
 )
 from gaiaagent.security.delegation import (
-    DelegationValidator,
     DelegationBuilder,
-    DelegationResult,
+    DelegationValidator,
     compute_chain_hash,
 )
-from gaiaagent.security.audit import AuditLog, AuditAction, AuditSeverity
-from gaiaagent.core.message import DelegationHop, MessageSecurity
-from datetime import datetime, timezone, timedelta
-
 
 # =============================================================================
 # Authentication Tests / 认证测试
@@ -223,7 +218,10 @@ class TestDelegationValidator:
 
     def test_valid_chain(self, validator):
         chain = [
-            DelegationHop(from_agent="user/alice", to_agent="orch", scopes=["read", "write", "admin"]),
+            DelegationHop(
+                from_agent="user/alice", to_agent="orch",
+                scopes=["read", "write", "admin"],
+            ),
             DelegationHop(from_agent="orch", to_agent="researcher", scopes=["read", "write"]),
             DelegationHop(from_agent="researcher", to_agent="web-search", scopes=["read"]),
         ]
@@ -240,7 +238,10 @@ class TestDelegationValidator:
     def test_scope_widening_rejected(self, validator):
         chain = [
             DelegationHop(from_agent="user/alice", to_agent="orch", scopes=["read"]),
-            DelegationHop(from_agent="orch", to_agent="researcher", scopes=["read", "write"]),  # Widened!
+            DelegationHop(
+                from_agent="orch", to_agent="researcher",
+                scopes=["read", "write"],  # Widened!
+            ),
         ]
         security = MessageSecurity(delegation_chain=chain)
         result = validator.validate(security)
@@ -391,7 +392,7 @@ class TestAuditLog:
         assert audit.count == 0
 
     def test_entry_serialization(self):
-        entry = AuditEntry_to_test = AuditAction.AGENT_REGISTERED
+        _ = AuditAction.AGENT_REGISTERED  # ensure import is used
         from gaiaagent.security.audit import AuditEntry
         e = AuditEntry(action=AuditAction.AGENT_REGISTERED, agent_id="test")
         d = e.to_dict()

@@ -6,13 +6,12 @@ import pytest
 
 from gaiaagent.workflows.orchestrator import (
     DynamicWorkflowEngine,
-    EvaluatorOptimizer,
     EvalResult,
+    EvaluatorOptimizer,
     IntelligentRouter,
     OrchestratorWorkers,
     ParallelFanOut,
     PromptChain,
-    WorkflowResult,
 )
 
 

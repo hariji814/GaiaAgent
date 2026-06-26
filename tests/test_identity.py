@@ -3,8 +3,8 @@
 import pytest
 
 from gaiaagent.core.identity import (
-    AURCId,
     AgentDescriptor,
+    AURCId,
     AuthDeclaration,
     Capabilities,
     InputOutputSchema,

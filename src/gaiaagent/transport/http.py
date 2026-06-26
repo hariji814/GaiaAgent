@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Type for message handlers / 消息处理函数类型
-HTTPMessageHandler = Callable[[dict], Awaitable[dict]]
+HTTPMessageHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
 class HTTPTransportError(Exception):
@@ -41,6 +42,7 @@ class HTTPTransportServer:
         self._host = host
         self._port = port
         self._handler: HTTPMessageHandler | None = None
+        self._dashboard_api: Any = None  # DashboardAPI ASGI app
         self._server: Any = None  # Will hold the actual server instance
         self._running = False
 
@@ -48,10 +50,14 @@ class HTTPTransportServer:
         """Set the message handler. 设置消息处理函数"""
         self._handler = handler
 
+    def set_dashboard_api(self, api: Any) -> None:
+        """Mount a DashboardAPI ASGI app for /dashboard and /api/* routes.
+        挂载仪表盘 ASGI 应用"""
+        self._dashboard_api = api
+
     async def start(self) -> None:
         """Start the HTTP server. 启动 HTTP 服务器"""
         try:
-            import uvicorn
             from uvicorn import Config, Server
 
             # Create ASGI app / 创建 ASGI 应用
@@ -84,12 +90,30 @@ class HTTPTransportServer:
         """Create the ASGI application. 创建 ASGI 应用"""
         handler = self._handler
 
-        async def app(scope: dict, receive: Any, send: Any) -> None:
+        async def app(scope: dict[str, Any], receive: Any, send: Any) -> None:
             if scope["type"] != "http":
                 return
 
             method = scope.get("method", "")
             path = scope.get("path", "")
+
+            # Route dashboard requests to the DashboardAPI ASGI app
+            # / 将仪表盘请求路由到 DashboardAPI
+            if path.startswith("/dashboard") or path.startswith("/api/") or path == "/metrics":
+                if self._dashboard_api is not None:
+                    await self._dashboard_api.handle_request(scope, receive, send)
+                    return
+                # No dashboard configured / 仪表盘未配置
+                await send({
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [[b"content-type", b"application/json"]],
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": json.dumps({"error": "Dashboard not enabled"}).encode(),
+                })
+                return
 
             # Only handle POST /aurc / 只处理 POST /aurc
             if method == "POST" and path in ("/aurc", "/aurc/"):
@@ -172,7 +196,7 @@ class HTTPTransportClient:
         self._timeout = timeout_seconds
         self._session: Any = None
 
-    async def send(self, url: str, message: dict) -> dict:
+    async def send(self, url: str, message: dict[str, Any]) -> dict[str, Any]:
         """Send an AURC message via HTTP POST.
         通过 HTTP POST 发送 AURC 消息
 
@@ -195,7 +219,8 @@ class HTTPTransportClient:
                     },
                 )
                 response.raise_for_status()
-                return response.json()
+                result: dict[str, Any] = response.json()
+                return result
         except ImportError:
             # Fallback to urllib / 回退到 urllib
             import urllib.request
@@ -207,18 +232,21 @@ class HTTPTransportClient:
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                return json.loads(resp.read())
+                result = json.loads(resp.read())
+            return result
 
-    async def health_check(self, url: str) -> dict:
+    async def health_check(self, url: str) -> dict[str, Any]:
         """Check health of a remote agent. 检查远程 Agent 的健康状态"""
         try:
             from urllib.parse import urlparse
+
             import httpx
             parsed = urlparse(url)
             health_url = f"{parsed.scheme}://{parsed.netloc}/health"
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 response = await client.get(health_url)
-                return response.json()
+                result: dict[str, Any] = response.json()
+                return result
         except Exception:
             return {"status": "unreachable"}
 

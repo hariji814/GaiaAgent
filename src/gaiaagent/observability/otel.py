@@ -18,7 +18,6 @@ Graceful degradation / 优雅降级:
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from .tracing import BridgeTraceRecorder, TraceSpan
 
@@ -55,15 +54,17 @@ class OTelSpanExporter:
         self._otel_available = False
         self._tracer = None
         try:
-            from opentelemetry import trace as _otel_trace  # noqa: F401
-            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry import (  # type: ignore[import-not-found]
+                trace as _otel_trace,  # noqa: F401
+            )
+            from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-not-found]
             self._otel_trace = _otel_trace
             self._otel_available = True
             # Use a dedicated provider so we don't clobber a global one.
             self._provider = TracerProvider()
             self._tracer = self._provider.get_tracer("gaiaagent.aurc")
         except ImportError:
-            self._otel_trace = None  # type: ignore[assignment]
+            self._otel_trace = None
             self._provider = None
             logger.debug(
                 "opentelemetry not installed; OTelSpanExporter.export is a no-op"

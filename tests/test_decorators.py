@@ -3,7 +3,6 @@
 import pytest
 
 from gaiaagent.sdk.decorators import aurc_agent, skill
-from gaiaagent.core.identity import AgentDescriptor
 
 
 class TestSkillDecorator:

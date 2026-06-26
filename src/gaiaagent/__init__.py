@@ -6,6 +6,8 @@ Agent 统一运行时与通信协议
 __version__ = "0.1.0"
 
 # Re-export key types for convenience / 导出关键类型
+from gaiaagent.core.identity import AgentDescriptor, AURCId
+from gaiaagent.core.message import AURCMessage
 from gaiaagent.core.types import (
     AgentState,
     ContextScope,
@@ -13,8 +15,6 @@ from gaiaagent.core.types import (
     MessageDirection,
     Priority,
 )
-from gaiaagent.core.identity import AURCId, AgentDescriptor
-from gaiaagent.core.message import AURCMessage
 
 __all__ = [
     "__version__",

@@ -2,7 +2,7 @@
 
 import pytest
 
-from gaiaagent.bus.codec import JSONCodec, NDJSONCodec, MessageFrame, CodecError
+from gaiaagent.bus.codec import CodecError, JSONCodec, MessageFrame, NDJSONCodec
 from gaiaagent.core.message import AURCMessage, MessageBody
 from gaiaagent.core.types import MessageDirection
 

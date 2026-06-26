@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from gaiaagent.core.identity import AgentDescriptor, Capabilities, SkillDeclaration
-from gaiaagent.core.types import AgentState, RecoveryPolicy, RecoveryStrategy, RecoveryAction
+from gaiaagent.core.types import AgentState, RecoveryAction, RecoveryPolicy, RecoveryStrategy
 from gaiaagent.harness.lifecycle import RuntimeHarness
 from gaiaagent.integrations.claude import ClaudeLLM, ClaudeResponse
 

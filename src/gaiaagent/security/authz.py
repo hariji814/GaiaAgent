@@ -38,25 +38,25 @@ class Constraint:
         """Evaluate this constraint against an actual value. 对实际值求值"""
         match self.operator:
             case "eq":
-                return actual_value == self.value
+                return bool(actual_value == self.value)
             case "ne":
-                return actual_value != self.value
+                return bool(actual_value != self.value)
             case "gt":
-                return actual_value > self.value
+                return bool(actual_value > self.value)
             case "lt":
-                return actual_value < self.value
+                return bool(actual_value < self.value)
             case "gte":
-                return actual_value >= self.value
+                return bool(actual_value >= self.value)
             case "lte":
-                return actual_value <= self.value
+                return bool(actual_value <= self.value)
             case "in":
-                return actual_value in self.value
+                return bool(actual_value in self.value)
             case "not_in":
-                return actual_value not in self.value
+                return bool(actual_value not in self.value)
             case "matches":
                 return bool(re.match(self.value, str(actual_value)))
             case "contains":
-                return self.value in actual_value
+                return bool(self.value in actual_value)
             case _:
                 logger.warning("Unknown operator: %s", self.operator)
                 return False
@@ -68,7 +68,8 @@ class AuthorizationRule:
     resource_type: str
     actions: list[str]
     constraints: list[Constraint] = field(default_factory=list)
-    time_window: dict[str, str] | None = None  # {"start": "08:00", "end": "22:00", "timezone": "UTC"}
+    time_window: dict[str, str] | None = None
+    # {"start": "08:00", "end": "22:00", "timezone": "UTC"}
     rate_limit: int | None = None  # max operations per hour
 
     def matches_resource(self, resource_type: str) -> bool:

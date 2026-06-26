@@ -49,7 +49,7 @@ class A2ABridge:
             source_protocol == "aurc/0.1" and target_protocol == self.source_protocol
         )
 
-    async def translate_to_aurc(self, a2a_message: dict) -> AURCMessage:
+    async def translate_to_aurc(self, a2a_message: dict[str, Any]) -> AURCMessage:
         """Translate an A2A JSON-RPC message to AURC format.
         将 A2A JSON-RPC 消息翻译为 AURC 格式
 
@@ -153,7 +153,7 @@ class A2ABridge:
                 correlation_id=str(msg_id) if msg_id else None,
             )
 
-    async def translate_from_aurc(self, aurc_message: AURCMessage) -> dict:
+    async def translate_from_aurc(self, aurc_message: AURCMessage) -> dict[str, Any]:
         """Translate an AURC message to A2A JSON-RPC format.
         将 AURC 消息翻译为 A2A JSON-RPC 格式
 
@@ -260,7 +260,7 @@ class A2ABridge:
 
         return {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Unsupported message type"}}
 
-    async def map_capabilities(self, a2a_skills: list[dict]) -> list[dict]:
+    async def map_capabilities(self, a2a_skills: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Map A2A Agent Card skills to AURC skill declarations.
         将 A2A Agent Card 技能映射为 AURC 技能声明
         """
@@ -276,7 +276,7 @@ class A2ABridge:
             })
         return skills
 
-    def map_agent_card(self, agent_card: dict) -> dict:
+    def map_agent_card(self, agent_card: dict[str, Any]) -> dict[str, Any]:
         """Convert an A2A Agent Card to an AURC Agent Descriptor dict.
         将 A2A Agent Card 转换为 AURC Agent Descriptor 字典
         """
@@ -306,7 +306,7 @@ class A2ABridge:
         }
 
     @staticmethod
-    def _extract_content(messages: list[dict]) -> str:
+    def _extract_content(messages: list[dict[str, Any]]) -> str:
         """Extract text content from A2A messages."""
         parts = []
         for msg in messages:

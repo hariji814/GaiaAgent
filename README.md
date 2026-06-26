@@ -159,6 +159,21 @@ pip install gaiaagent[claude]      # Claude integration
 pip install gaiaagent[all]
 ```
 
+### See It in Action (30 Seconds, No API Key)
+
+```bash
+# Install with HTTP transport support
+pip install gaiaagent[http]
+
+# Run the built-in demo: 3 agents, cross-protocol chain, live dashboard
+gaiaagent demo
+```
+
+This spins up 3 demo agents (Researcher, Analyst, Writer) in a PromptChain
+workflow, routes messages across MCP -> A2A -> ACP protocol boundaries,
+opens a live health dashboard in your browser, and requires zero
+configuration or API keys. It is the fastest way to see what AURC does.
+
 ### Define an Agent in 30 Seconds
 
 ```python
@@ -555,7 +570,7 @@ docker run -p 8080:8080 gaiaagent
 | **v0.4** | Polyglot SDKs (TypeScript · Go · Rust) + conformance suite | 🔜 |
 | **v1.0** | Standard-grade: second independent implementation · spec frozen · security audit | 🔜 |
 
-**What "alpha" means here:** the modules exist, are unit-tested (299 passing), and run end-to-end in `python main.py` — but edge cases, perf, and the *second independent implementation* (the bar to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec, [ROADMAP.md](ROADMAP.md) for what's next.
+**What "alpha" means here:** the modules exist, are unit-tested (352 passing), and run end-to-end in `python main.py` — but edge cases, perf, and the *second independent implementation* (the bar to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec, [ROADMAP.md](ROADMAP.md) for what's next.
 
 > 📌 **Highest-leverage contribution:** build the second independent implementation of AURC — that single act graduates the protocol from "our spec" to "a standard."
 
@@ -637,7 +652,7 @@ pytest  # verify everything works
 
 | Component | License |
 |:---|:---|
-| **Code** | [AGPL-3.0](LICENSE) |
+| **Code** | [Apache-2.0](LICENSE) |
 | **Protocol Specification** | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 
 ---
