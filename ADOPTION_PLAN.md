@@ -6,6 +6,20 @@
 
 ---
 
+## 执行进度（截至 2026-06-26）
+
+| 阶段 | 状态 | 实证 |
+|---|---|---|
+| **Phase 0** 信任地基 | ✅ 完成 | license Apache-2.0（LICENSE/pyproject/10 文档/decorators 默认）；spec 状态自洽；CI 去假绿、加 Windows 矩阵；spec/AURC_SPEC.md 已归档 |
+| **Phase 1** 一键 demo | ✅ 完成 | `_cmd_serve` 接 `AURCServer.http_handler` 真路由；`gaiaagent demo` + `examples/e2e_cross_process.py` 跨进程真 HTTP（add→42、multiply→42，correlation_id 端到端） |
+| **Phase 2** 堵空壳 | ✅ 完成 | `_invoke_skill` 真路由修复；lifecycle/orchestrator/router 空壳补齐（commit c2e0633）；行为测试覆盖 |
+| **Phase 3** 推广物料 | ✅ 完成 | why-gaiaagent.md/SECURITY/GOVERNANCE/ADOPTERS/CODE_OF_CONDUCT/CHANGELOG/issue 模板齐备 |
+| **Phase 4** 生产持久化 | ⏳ v0.2 排期 | 抽象先行（AgentRegistry/MessageBus Protocol）+ 持久化三件套，不阻塞推广 |
+
+**验证门槛**：405 passed / 1 skipped；ruff 0 错；mypy strict 0 错（48 源文件）；`uv build` 0.1.1 sdist+wheel 双产物干净。
+
+**发版阻塞项（唯一外部动作）**：gaiaagent 未上 PyPI（404）。已 bump 0.1.0→0.1.1、本地构建通过。需：① GitHub→Settings→Secrets 配置 PyPI trusted publisher；② 合并 `loop-cli-integration`→`main`；③ 推 `v0.1.1` tag 触发 `release.yml`（test job 已 gate publish）。
+
 ## 三根支柱
 
 | 支柱 | 一句话 | 衡量标准 |
