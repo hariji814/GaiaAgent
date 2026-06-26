@@ -105,6 +105,14 @@ class DelegationHop(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="When this delegation was made / 委托时间",
     )
+    signature: str = Field(
+        default="",
+        description="Ed25519 signature (base64); empty if unsigned / 本跳签名，未签名则空",
+    )
+    signing_key_id: str = Field(
+        default="",
+        description="Identifier of the signing key / 签名密钥标识",
+    )
 
 
 class MessageSecurity(BaseModel):

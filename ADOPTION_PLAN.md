@@ -14,9 +14,9 @@
 | **Phase 1** 一键 demo | ✅ 完成 | `_cmd_serve` 接 `AURCServer.http_handler` 真路由；`gaiaagent demo` + `examples/e2e_cross_process.py` 跨进程真 HTTP（add→42、multiply→42，correlation_id 端到端） |
 | **Phase 2** 堵空壳 | ✅ 完成 | `_invoke_skill` 真路由修复；lifecycle/orchestrator/router 空壳补齐（commit c2e0633）；行为测试覆盖 |
 | **Phase 3** 推广物料 | ✅ 完成 | why-gaiaagent.md/SECURITY/GOVERNANCE/ADOPTERS/CODE_OF_CONDUCT/CHANGELOG/issue 模板齐备 |
-| **Phase 4** 生产持久化 | 🔄 进行中 (4.1-4.3 done) | 4.1 AgentRegistry/MessageBus Protocol + TTL 驱逐;4.2 AuditSink/TraceSink Protocol + FileAuditSink/FileTraceSink 实时持久化+轮转;4.3 HTTP 连接池+重试+超时、WebSocket 心跳、HTTPServer 优雅排空+超时强退+SIGTERM 钩子;4.4 安全(桥接 authz/Ed25519 委托签名)待做 |
+| **Phase 4** 生产持久化 | ✅ 完成 (4.1-4.4) | 4.1 AgentRegistry/MessageBus Protocol + TTL 驱逐;4.2 AuditSink/TraceSink Protocol + FileAuditSink/FileTraceSink 实时持久化+轮转;4.3 HTTP 连接池+重试+超时、WebSocket 心跳、HTTPServer 优雅排空+超时强退+SIGTERM 钩子;4.4 BridgeAuthzGuard fail-closed 桥接授权 + Ed25519 委托签名 + DelegationValidator 验签 |
 
-**验证门槛**：453 passed / 1 skipped；ruff 0 错；mypy strict 0 错（48 源文件）；`uv build` 0.1.1 sdist+wheel 双产物干净。
+**验证门槛**：469 passed / 2 skipped；ruff 0 错；mypy strict 0 错（48 源文件）；`uv build` 0.1.1 sdist+wheel 双产物干净。
 
 **发版阻塞项（唯一外部动作）**：gaiaagent 未上 PyPI（404）。已 bump 0.1.0→0.1.1、本地构建通过。需：① GitHub→Settings→Secrets 配置 PyPI trusted publisher；② 合并 `loop-cli-integration`→`main`；③ 推 `v0.1.1` tag 触发 `release.yml`（test job 已 gate publish）。
 

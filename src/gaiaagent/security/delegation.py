@@ -40,6 +40,72 @@ class DelegationValidator:
     def __init__(self, max_depth: int = 5, require_signatures: bool = False) -> None:
         self._max_depth = max_depth
         self._require_signatures = require_signatures
+        # key_id -> 32-byte Ed25519 public key, for signature verification
+        # / key_id -> 32 字节 Ed25519 公钥，用于验签
+        self._public_keys: dict[str, bytes] = {}
+
+    def register_public_key(self, key_id: str, public_key: bytes) -> None:
+        """Register a public key for verifying delegation signatures.
+
+        注册公钥，用于验证委托签名。
+        """
+        self._public_keys[key_id] = public_key
+        logger.info("Registered public key '%s' for delegation verification", key_id)
+
+    def verify_chain_signatures(self, security: MessageSecurity) -> DelegationResult:
+        """Verify Ed25519 signatures on every signed hop in the chain.
+
+        验证委托链中每个已签名跳的 Ed25519 签名。
+
+        Unsigned hops are skipped (signatures are optional per hop). When
+        require_signatures is True, a chain with NO signatures at all is
+        rejected. Signed hops must verify against the registered public key
+        identified by signing_key_id.
+        """
+        from .signing import (
+            InvalidSignatureError,
+            SigningUnavailableError,
+            verify_delegation_hop,
+        )
+
+        chain = security.delegation_chain
+        if not chain:
+            return DelegationResult(valid=True, reason="No delegation chain to verify")
+
+        signed_count = 0
+        for i, hop in enumerate(chain):
+            if not hop.signature:
+                continue
+            signed_count += 1
+            pub = self._public_keys.get(hop.signing_key_id)
+            if pub is None:
+                return DelegationResult(
+                    valid=False,
+                    reason=f"Unknown signing key '{hop.signing_key_id}' at hop {i}",
+                    failed_hop=i,
+                )
+            try:
+                verify_delegation_hop(hop, pub)
+            except SigningUnavailableError:
+                # cryptography not installed — cannot enforce signatures
+                # / 未安装 cryptography，无法强制签名
+                return DelegationResult(
+                    valid=False,
+                    reason="Signature verification needs cryptography (gaiaagent[security])",
+                )
+            except InvalidSignatureError as exc:
+                return DelegationResult(
+                    valid=False,
+                    reason=str(exc),
+                    failed_hop=i,
+                )
+
+        if self._require_signatures and signed_count == 0:
+            return DelegationResult(
+                valid=False,
+                reason="Signatures required but chain has no signed hops",
+            )
+        return DelegationResult(valid=True, reason=f"Verified {signed_count} signature(s)")
 
     def validate(self, security: MessageSecurity) -> DelegationResult:
         """Validate a delegation chain.
@@ -101,6 +167,12 @@ class DelegationValidator:
                            f"{chain[i].timestamp} < {chain[i-1].timestamp}",
                     failed_hop=i,
                 )
+
+        # Verify Ed25519 signatures (Phase 4.4) / 验证 Ed25519 签名
+        # / 验证 Ed25519 签名（Phase 4.4）
+        sig_result = self.verify_chain_signatures(security)
+        if not sig_result.valid:
+            return sig_result
 
         return DelegationResult(
             valid=True,
