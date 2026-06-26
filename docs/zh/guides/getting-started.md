@@ -10,7 +10,7 @@ GaiaAgent 实现了 **AURC（Agent Unified Runtime & Communication）**——一
 
 AURC 用一个规范消息格式（`AURCMessage`）把三者统一起来，并补上了缺失的部分：
 
-1. **生命周期状态机**：9 个状态（REGISTERING 鈫?READY 鈫?RUNNING 鈫?PAUSED 鈫?COMPLETED / FAILED / STOPPED，含 RECOVERING），带错误恢复、退避重试、优雅停机。
+1. **生命周期状态机**：9 个状态（REGISTERING →READY →RUNNING →PAUSED →COMPLETED / FAILED / STOPPED，含 RECOVERING），带错误恢复、退避重试、优雅停机。
 2. **协议桥接**：MCP / A2A / ACP 消息互译为规范格式，一条审计链路横跨所有协议边界。
 3. **可观测性**：防篡改审计日志、实时 HTML 健康仪表盘、Prometheus metrics、跨协议桥接链路追踪。
 4. **安全**：基于能力的访问控制（CapABAC）、scope 收窄的委派链防 confused deputy、消息只携带 token 引用而非原始 token。
@@ -37,7 +37,7 @@ uv add "gaiaagent[http]"
 gaiaagent demo
 ```
 
-它会启动 3 个 Agent（研究员、分析师、作者），跑一条链式工作流（研究 鈫?分析 鈫?写作），跨越 MCP 鈫?A2A 鈫?ACP 协议边界，并在浏览器里打开实时仪表盘。所有 LLM 响应来自内置 stub，所以永远跑得起来。
+它会启动 3 个 Agent（研究员、分析师、作者），跑一条链式工作流（研究 →分析 →写作），跨越 MCP →A2A →ACP 协议边界，并在浏览器里打开实时仪表盘。所有 LLM 响应来自内置 stub，所以永远跑得起来。
 
 ## 接入真实 LLM
 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
 - `@aurc_agent` 装饰器自动生成 `agent.aurc_descriptor`（AgentDescriptor），声明身份、能力、协议支持。
 - `@skill` 把方法注册为可被路由调用的技能。
-- 生命周期由 `RuntimeHarness` 驱动：`register` 鈫?`start` 鈫?(运行) 鈫?`complete`。
+- 生命周期由 `RuntimeHarness` 驱动：`register` →`start` →(运行) →`complete`。
 
 ## 桥接协议
 

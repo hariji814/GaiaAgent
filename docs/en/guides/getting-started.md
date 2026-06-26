@@ -2,7 +2,7 @@
 
 > One document that explains what GaiaAgent is, why it exists, how to use it, and how to build your own agent.
 >
-> 馃寪 [涓­鏂囥](../../zh/guides/getting-started.md) | [5-min walkthrough](quickstart.md) | [Architecture](../architecture/overview.md) | [API reference](../api-reference.md)
+> Language: [中文](../../zh/guides/getting-started.md) | [English](getting-started.md) | [5-min walkthrough](quickstart.md) | [Architecture](../architecture/overview.md) | [API reference](../api-reference.md)
 
 ## What is GaiaAgent?
 

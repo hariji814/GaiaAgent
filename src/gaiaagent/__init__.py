@@ -15,6 +15,7 @@ from gaiaagent.core.types import (
     MessageDirection,
     Priority,
 )
+from gaiaagent.harness.lifecycle import RuntimeHarness
 
 __all__ = [
     "__version__",
@@ -26,4 +27,5 @@ __all__ = [
     "AURCId",
     "AgentDescriptor",
     "AURCMessage",
+    "RuntimeHarness",
 ]
