@@ -77,6 +77,88 @@ _WRITER_OUTPUT = (
 )
 
 
+class LLMBackend:
+    """Zero-dependency LLM client (urllib) for OpenAI and Anthropic.
+
+    When an API key is provided the demo calls a real model; otherwise it
+    falls back to the stub responses above so the demo always runs.
+    """
+
+    def __init__(self, api_key: str, provider: str = "openai", model: str = "auto") -> None:
+        self._api_key = api_key
+        self._provider = provider
+        self._model = model
+
+    @property
+    def has_key(self) -> bool:
+        return bool(self._api_key)
+
+    async def complete(self, system_prompt: str, user_prompt: str) -> str:
+        """Call the configured provider and return the text response."""
+        if self._provider == "anthropic":
+            return await asyncio.to_thread(self._call_anthropic, system_prompt, user_prompt)
+        return await asyncio.to_thread(self._call_openai, system_prompt, user_prompt)
+
+    def _call_openai(self, system_prompt: str, user_prompt: str) -> str:
+        import urllib.request
+
+        model = self._model if self._model != "auto" else "gpt-4o-mini"
+        payload = json.dumps({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result: dict[str, Any] = json.loads(resp.read())
+        return str(result["choices"][0]["message"]["content"])
+
+    def _call_anthropic(self, system_prompt: str, user_prompt: str) -> str:
+        import urllib.request
+
+        model = self._model if self._model != "auto" else "claude-3-5-sonnet-20241022"
+        payload = json.dumps({
+            "model": model,
+            "max_tokens": 1024,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_prompt}],
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload,
+            headers={
+                "x-api-key": self._api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result: dict[str, Any] = json.loads(resp.read())
+        return str(result["content"][0]["text"])
+
+
+_llm_backend: LLMBackend | None = None
+
+
+async def _llm_complete(system_prompt: str, user_prompt: str, stub: str) -> str:
+    """Call the LLM when configured, otherwise return the stub response."""
+    if _llm_backend and _llm_backend.has_key:
+        try:
+            return await _llm_backend.complete(system_prompt, user_prompt)
+        except Exception as exc:
+            logger.warning("LLM call failed, falling back to stub: %s", exc)
+    return stub
+
+
 def _make_descriptor(
     namespace: str, name: str, skills: list[str]
 ) -> AgentDescriptor:
@@ -104,41 +186,71 @@ def _make_descriptor(
 
 
 async def _researcher_handler(msg: AURCMessage) -> dict[str, Any]:
-    """Stub researcher agent - simulates LLM research."""
+    """Researcher agent - calls a real LLM when configured."""
     logger.info("Researcher: processing query...")
     await asyncio.sleep(0.5)  # simulate work
-    return {"agent": "researcher", "findings": _RESEARCH_OUTPUT}
+    content = msg.body.params.get("content", str(msg.body.params))
+    findings = await _llm_complete(
+        "You are a meticulous research analyst. Produce concise, structured findings.",
+        f"Research this topic and list 3-4 key findings:\n{content}",
+        _RESEARCH_OUTPUT,
+    )
+    return {"agent": "researcher", "findings": findings}
 
 
 async def _analyst_handler(msg: AURCMessage) -> dict[str, Any]:
-    """Stub analyst agent - simulates LLM analysis."""
+    """Analyst agent - calls a real LLM when configured."""
     logger.info("Analyst: analyzing findings...")
     await asyncio.sleep(0.5)
-    return {"agent": "analyst", "analysis": _ANALYSIS_OUTPUT}
+    content = msg.body.params.get("content", str(msg.body.params))
+    analysis = await _llm_complete(
+        "You are a strategic analyst. Identify gaps and draw conclusions.",
+        f"Analyze these findings and explain why they matter:\n{content}",
+        _ANALYSIS_OUTPUT,
+    )
+    return {"agent": "analyst", "analysis": analysis}
 
 
 async def _writer_handler(msg: AURCMessage) -> dict[str, Any]:
-    """Stub writer agent - simulates LLM writing."""
+    """Writer agent - calls a real LLM when configured."""
     logger.info("Writer: composing report...")
     await asyncio.sleep(0.5)
-    return {"agent": "writer", "report": _WRITER_OUTPUT}
+    content = msg.body.params.get("content", str(msg.body.params))
+    report = await _llm_complete(
+        "You are a technical writer. Produce a clear Markdown report.",
+        f"Write a structured Markdown report based on this analysis:\n{content}",
+        _WRITER_OUTPUT,
+    )
+    return {"agent": "writer", "report": report}
 
 
 # --- Workflow step functions for PromptChain / 工作流步骤 ---
 
 async def _step_research(input_data: Any) -> str:
     """Step 1: Research (simulates MCP -> AURC inbound)."""
-    return _RESEARCH_OUTPUT
+    return await _llm_complete(
+        "You are a meticulous research analyst. Produce concise, structured findings.",
+        f"Research this topic and list 3-4 key findings:\n{input_data}",
+        _RESEARCH_OUTPUT,
+    )
 
 
 async def _step_analyze(input_data: Any) -> str:
     """Step 2: Analyze (simulates AURC -> A2A outbound delegation)."""
-    return _ANALYSIS_OUTPUT
+    return await _llm_complete(
+        "You are a strategic analyst. Identify gaps and draw conclusions.",
+        f"Analyze these findings and explain why they matter:\n{input_data}",
+        _ANALYSIS_OUTPUT,
+    )
 
 
 async def _step_write(input_data: Any) -> str:
     """Step 3: Write (simulates AURC -> ACP outbound delegation)."""
-    return _WRITER_OUTPUT
+    return await _llm_complete(
+        "You are a technical writer. Produce a clear Markdown report.",
+        f"Write a structured Markdown report based on this analysis:\n{input_data}",
+        _WRITER_OUTPUT,
+    )
 
 
 def _open_browser_delayed(url: str, delay: float = 1.5) -> None:
@@ -154,15 +266,32 @@ async def run_demo(
     host: str = "127.0.0.1",
     port: int = 8080,
     open_browser: bool = True,
+    api_key: str | None = None,
+    provider: str = "openai",
+    model: str = "auto",
 ) -> None:
     """Run the full AURC demo.
 
     Sets up 3 agents, a cross-protocol message router, a health dashboard,
     runs a PromptChain workflow, then serves the dashboard on HTTP.
+
+    When *api_key* is provided the demo calls a real LLM (OpenAI or
+    Anthropic); otherwise it uses built-in stub responses so the demo
+    always runs with zero configuration.
     """
+    global _llm_backend
+    if api_key:
+        _llm_backend = LLMBackend(api_key=api_key, provider=provider, model=model)
+    else:
+        _llm_backend = None
+
     print("=" * 60)
     print("  AURC Protocol Demo - 3 Agents, Cross-Protocol Chain")
     print("=" * 60)
+    if _llm_backend and _llm_backend.has_key:
+        print(f"  [LLM] provider={provider}  model={model}")
+    else:
+        print("  [STUB] No API key - using built-in responses (add --api-key for real LLM)")
     print()
 
     # 1. Stand up the runtime / 搭建运行时

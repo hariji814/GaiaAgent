@@ -443,6 +443,9 @@ def _cmd_demo(args: argparse.Namespace) -> int:
             host=args.host,
             port=args.port,
             open_browser=not args.no_browser,
+            api_key=args.api_key,
+            provider=args.llm_provider,
+            model=args.model,
         ))
     except KeyboardInterrupt:
         _print(f"\n{_OK} Demo stopped.  演示已停止", quiet)
@@ -456,6 +459,103 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 # =============================================================================
 # Argument parser construction / 参数解析器构建
 # =============================================================================
+
+
+_AGENT_TEMPLATE = '''"""__PROJECT__ - an AURC agent built with GaiaAgent."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from gaiaagent.sdk.decorators import aurc_agent, skill
+
+
+@aurc_agent(
+    id="aurc:__PROJECT__/myagent:v1.0",
+    display_name="My Agent",
+    description="A starter AURC agent - edit me!",
+    protocols=["mcp/2025-06-18"],
+    tags=["starter"],
+)
+class MyAgent:
+
+    @skill("greet", description="Greet someone by name")
+    async def greet(self, name: str) -> dict[str, Any]:
+        return {"message": f"Hello, {name}! Welcome to AURC."}
+
+    @skill("echo", description="Echo back any input")
+    async def echo(self, text: str) -> dict[str, Any]:
+        return {"echo": text}
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    from gaiaagent import RuntimeHarness
+
+    async def main() -> None:
+        harness = RuntimeHarness()
+        agent = MyAgent()
+        await harness.register(agent.aurc_descriptor)
+        await harness.start(agent.aurc_descriptor.aurc_id)
+        print(await agent.greet("World"))
+        await harness.complete(agent.aurc_descriptor.aurc_id)
+
+    asyncio.run(main())
+'''
+
+_README_TEMPLATE = '''# __PROJECT__
+
+An AURC agent built with GaiaAgent.
+
+## Quick Start
+
+    pip install gaiaagent[http]
+    python agent.py
+
+## Run the full AURC demo
+
+    gaiaagent demo
+
+## Learn More
+
+- AURC Protocol: https://github.com/gaiaagent/gaiaagent
+- Getting Started: https://gaiaagent.dev/docs
+'''
+
+
+def _cmd_init(args: argparse.Namespace) -> int:
+    """Scaffold a new AURC agent project with a working template."""
+    project_dir = Path(args.name)
+
+    if project_dir.exists():
+        _error(f"Directory already exists: {project_dir}")
+        return 1
+
+    project_dir.mkdir()
+
+    (project_dir / "agent.py").write_text(
+        _AGENT_TEMPLATE.replace("__PROJECT__", args.name), encoding="utf-8"
+    )
+    (project_dir / "README.md").write_text(
+        _README_TEMPLATE.replace("__PROJECT__", args.name), encoding="utf-8"
+    )
+    (project_dir / "requirements.txt").write_text(
+        "gaiaagent[http]\n", encoding="utf-8"
+    )
+
+    _print(f"{_OK} Created AURC agent project: {args.name}")
+    _print(f"  {_ARROW} {project_dir / 'agent.py'}")
+    _print(f"  {_ARROW} {project_dir / 'README.md'}")
+    _print(f"  {_ARROW} {project_dir / 'requirements.txt'}")
+    _print("")
+    _print("Next steps:")
+    _print(f"  cd {args.name}")
+    _print("  pip install -r requirements.txt")
+    _print("  python agent.py        # run your agent")
+    _print("  gaiaagent demo         # see the full AURC demo")
+
+    return 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -525,10 +625,37 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Dashboard port (default: 8080) / 仪表盘端口",
     )
     p_demo.add_argument(
+        "--api-key",
+        default=None,
+        help="LLM API key for real model calls (OpenAI/Anthropic). Omit for stub mode.",
+    )
+    p_demo.add_argument(
+        "--llm-provider",
+        default="openai",
+        choices=["openai", "anthropic"],
+        help="LLM provider when --api-key is set (default: openai)",
+    )
+    p_demo.add_argument(
+        "--model",
+        default="auto",
+        help="Model name (default: auto -> gpt-4o-mini / claude-3-5-sonnet)",
+    )
+    p_demo.add_argument(
         "--no-browser",
         action="store_true",
         default=False,
         help="Do not auto-open the browser / 不自动打开浏览器",
+    )
+
+    # --- init ---
+    p_init = subparsers.add_parser(
+        "init",
+        parents=[parent],
+        help="Scaffold a new AURC agent project",
+    )
+    p_init.add_argument(
+        "name",
+        help="Project directory name",
     )
 
     # --- version ---
@@ -624,6 +751,7 @@ def main() -> None:
         "version": _cmd_version,
         "info": _cmd_info,
         "validate": _cmd_validate,
+        "init": _cmd_init,
     }
 
     # Handle nested subcommands (bridge test, registry export) / 处理嵌套子命令
