@@ -14,7 +14,7 @@
 | **Phase 1** 一键 demo | ✅ 完成 | `_cmd_serve` 接 `AURCServer.http_handler` 真路由；`gaiaagent demo` + `examples/e2e_cross_process.py` 跨进程真 HTTP（add→42、multiply→42，correlation_id 端到端） |
 | **Phase 2** 堵空壳 | ✅ 完成 | `_invoke_skill` 真路由修复；lifecycle/orchestrator/router 空壳补齐（commit c2e0633）；行为测试覆盖 |
 | **Phase 3** 推广物料 | ✅ 完成 | why-gaiaagent.md/SECURITY/GOVERNANCE/ADOPTERS/CODE_OF_CONDUCT/CHANGELOG/issue 模板齐备 |
-| **Phase 4** 生产持久化 | ⏳ v0.2 排期 | 抽象先行（AgentRegistry/MessageBus Protocol）+ 持久化三件套，不阻塞推广 |
+| **Phase 4** 生产持久化 | 🔄 进行中 (4.1-4.2 done) | 4.1 AgentRegistry/MessageBus Protocol + TTL 驱逐;4.2 AuditSink/TraceSink Protocol + FileAuditSink/FileTraceSink 实时持久化+轮转;4.3-4.4 待做 |
 
 **验证门槛**：405 passed / 1 skipped；ruff 0 错；mypy strict 0 错（48 源文件）；`uv build` 0.1.1 sdist+wheel 双产物干净。
 
