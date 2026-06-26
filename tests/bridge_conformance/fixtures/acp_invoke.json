@@ -1,0 +1,19 @@
+{
+  "protocol": "acp",
+  "description": "ACP invoke -> AURC delegation",
+  "external_message": {
+    "method": "invoke",
+    "id": "acp-1",
+    "params": {
+      "agent_id": "acp-worker",
+      "task": "Summarize the news",
+      "input": {"topic": "AI"},
+      "session_id": "sess-acp-1"
+    }
+  },
+  "expected_aurc": {
+    "type": "delegation",
+    "body_method": "invoke",
+    "origin_protocol": "acp/1.0"
+  }
+}

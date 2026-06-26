@@ -68,36 +68,96 @@ def _error(message: str) -> None:
 # =============================================================================
 
 
+def _load_agent_module(path: str) -> Any:
+    """Import a user agent module and return its first @aurc_agent instance."""
+    import importlib.util
+
+    file_path = Path(path)
+    if not file_path.exists():
+        _error(f"Agent module not found: {file_path}")
+        raise SystemExit(1)
+
+    spec = importlib.util.spec_from_file_location("_aurc_user_agent", file_path)
+    if spec is None or spec.loader is None:
+        _error(f"Cannot load agent module: {file_path}")
+        raise SystemExit(1)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    for _name in dir(mod):
+        obj = getattr(mod, _name)
+        if isinstance(obj, type) and hasattr(obj, "_aurc_descriptor"):
+            return obj()
+    _error(f"No @aurc_agent class found in {file_path}")
+    raise SystemExit(1)
+
+
+def _make_echo_agent() -> Any:
+    """A minimal built-in agent so 'gaiaagent serve' works out of the box."""
+    from gaiaagent.sdk.decorators import aurc_agent, skill
+
+    @aurc_agent(
+        id="aurc:builtin/echo:v1.0",
+        display_name="Echo",
+        description="Built-in echo agent for zero-config serve",
+        protocols=["mcp/2025-06-18"],
+    )
+    class _Echo:
+        @skill("echo", description="Echo back any text")
+        async def echo(self, text: str) -> dict[str, Any]:
+            return {"echo": text}
+
+        @skill("ping", description="Health probe")
+        async def ping(self) -> dict[str, Any]:
+            return {"pong": True}
+
+    return _Echo()
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     """Start the AURC HTTP server.
     启动 AURC HTTP 服务器
 
-    Optionally enables a health dashboard endpoint.
+    POST /aurc routes to real @skill methods on registered agents. A built-in
+    echo agent is registered by default; pass --agent to load your own.
     可选启用健康仪表盘端点
     """
+    from gaiaagent.server import AURCServer
     from gaiaagent.transport.http import HTTPTransportServer
 
-    server = HTTPTransportServer(host=args.host, port=args.port)
+    aurc = AURCServer()
 
-    # Default message handler / 默认消息处理函数
-    async def _handler(request_data: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "status": "ok",
-            "protocol": "aurc/0.1",
-            "echo": request_data,
-        }
+    # Register the user-supplied agent if given, else a built-in echo agent.
+    agents_loaded: list[str] = []
+    user_agent = _load_agent_module(args.agent) if args.agent else None
+    if user_agent is not None:
+        asyncio.run(aurc.register_agent(user_agent))
+        agents_loaded.append(user_agent.aurc_descriptor.aurc_id)
+    else:
+        asyncio.run(aurc.register_agent(_make_echo_agent()))
+        agents_loaded.append("aurc:builtin/echo:v1.0")
 
-    server.set_handler(_handler)
+    http = HTTPTransportServer(host=args.host, port=args.port)
+    http.set_handler(aurc.http_handler)
+
+    if args.dashboard:
+        from gaiaagent.observability.dashboard import DashboardAPI, HealthDashboard
+        from gaiaagent.security.audit import AuditLog
+
+        dashboard = HealthDashboard(aurc.harness, AuditLog(), aurc.router)
+        http.set_dashboard_api(DashboardAPI(dashboard))
 
     quiet = args.quiet
     _print(f"{_OK} AURC server starting...", quiet)
     _print(f"  {_ARROW} Endpoint: http://{args.host}:{args.port}/aurc", quiet)
     _print(f"  {_ARROW} Health:   http://{args.host}:{args.port}/health", quiet)
+    for aid in agents_loaded:
+        _print(f"  {_ARROW} Agent:    {aid}", quiet)
     if args.dashboard:
-        _print(f"  {_ARROW} Dashboard: enabled", quiet)
+        _print(f"  {_ARROW} Dashboard: http://{args.host}:{args.port}/dashboard", quiet)
 
     try:
-        asyncio.run(server.start())
+        asyncio.run(http.start())
     except KeyboardInterrupt:
         _print(f"\n{_OK} Server stopped.  服务器已停止", quiet)
     except Exception as exc:
@@ -605,6 +665,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Enable health dashboard / 启用健康仪表盘",
+    )
+
+    p_serve.add_argument(
+        "--agent",
+        default=None,
+        help="Python file with a @aurc_agent class to serve / 要加载的 Agent 模块",
     )
 
     # --- demo ---

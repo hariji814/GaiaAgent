@@ -1,0 +1,16 @@
+{
+  "protocol": "mcp",
+  "description": "MCP tools/call -> AURC request invoke",
+  "external_message": {
+    "jsonrpc": "2.0",
+    "id": "mcp-1",
+    "method": "tools/call",
+    "params": {"name": "web-search", "arguments": {"query": "AURC"}}
+  },
+  "expected_aurc": {
+    "type": "request",
+    "body_method": "invoke",
+    "body_skill": "web-search",
+    "origin_protocol": "mcp/2025-06-18"
+  }
+}

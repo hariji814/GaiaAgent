@@ -45,6 +45,8 @@ class HTTPTransportServer:
         self._dashboard_api: Any = None  # DashboardAPI ASGI app
         self._server: Any = None  # Will hold the actual server instance
         self._running = False
+        # Extra POST routes: path -> handler (for bridge endpoints, etc.)
+        self._routes: dict[str, HTTPMessageHandler] = {}
 
     def set_handler(self, handler: HTTPMessageHandler) -> None:
         """Set the message handler. 设置消息处理函数"""
@@ -54,6 +56,11 @@ class HTTPTransportServer:
         """Mount a DashboardAPI ASGI app for /dashboard and /api/* routes.
         挂载仪表盘 ASGI 应用"""
         self._dashboard_api = api
+
+    def set_route(self, path: str, handler: HTTPMessageHandler) -> None:
+        """Register an extra POST route (e.g. an A2A/ACP bridge endpoint).
+        注册额外的 POST 路由（如桥接端点）"""
+        self._routes[path] = handler
 
     async def start(self) -> None:
         """Start the HTTP server. 启动 HTTP 服务器"""
@@ -113,6 +120,38 @@ class HTTPTransportServer:
                     "type": "http.response.body",
                     "body": json.dumps({"error": "Dashboard not enabled"}).encode(),
                 })
+                return
+
+            # Extra registered routes (bridge endpoints, etc.)
+            if method == "POST" and path in self._routes:
+                route_handler = self._routes[path]
+                body = b""
+                while True:
+                    message = await receive()
+                    body += message.get("body", b"")
+                    if not message.get("more_body", False):
+                        break
+                try:
+                    request_data = json.loads(body)
+                    response_data = await route_handler(request_data)
+                    response_body = json.dumps(response_data, default=str).encode()
+                    await send({
+                        "type": "http.response.start",
+                        "status": 200,
+                        "headers": [
+                            [b"content-type", b"application/json"],
+                            [b"x-protocol", b"aurc/0.1"],
+                        ],
+                    })
+                    await send({"type": "http.response.body", "body": response_body})
+                except Exception as e:
+                    error_body = json.dumps({"error": str(e)}).encode()
+                    await send({
+                        "type": "http.response.start",
+                        "status": 500,
+                        "headers": [[b"content-type", b"application/json"]],
+                    })
+                    await send({"type": "http.response.body", "body": error_body})
                 return
 
             # Only handle POST /aurc / 只处理 POST /aurc

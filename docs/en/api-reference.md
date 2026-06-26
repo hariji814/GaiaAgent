@@ -215,7 +215,7 @@ class AgentDescriptor(BaseModel):
     description: str = ""                            # Agent description
     version: str = "0.1.0"                           # Software version
     author: str = ""                                 # Author
-    license: str = "AGPL-3.0"                        # License
+    license: str = "Apache-2.0"                     # License
     capabilities: Capabilities                       # Skills provided/consumed
     protocols: ProtocolSupport                       # Supported protocols
     runtime: RuntimeRequirements                     # Runtime needs
@@ -775,7 +775,7 @@ def aurc_agent(
     description: str = "",
     version: str = "0.1.0",
     author: str = "",
-    license: str = "AGPL-3.0",
+    license: str = "Apache-2.0",
     protocols: list[str] | None = None,   # External protocols
     tags: list[str] | None = None,
     consumes: list[str] | None = None,    # External skills needed

@@ -143,7 +143,7 @@ def aurc_agent(
     description: str = "",
     version: str = "0.1.0",
     author: str = "",
-    license: str = "AGPL-3.0",
+    license: str = "Apache-2.0",
     protocols: list[str] | None = None,
     tags: list[str] | None = None,
     consumes: list[str] | None = None,

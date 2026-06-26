@@ -1,0 +1,19 @@
+{
+  "protocol": "a2a",
+  "description": "A2A tasks/send -> AURC delegation",
+  "external_message": {
+    "jsonrpc": "2.0",
+    "id": "a2a-1",
+    "method": "tasks/send",
+    "params": {
+      "id": "task-1",
+      "sessionId": "sess-1",
+      "messages": [{"role": "user", "parts": [{"type": "text", "text": "research AURC"}]}]
+    }
+  },
+  "expected_aurc": {
+    "type": "delegation",
+    "body_method": "invoke",
+    "origin_protocol": "a2a/1.0"
+  }
+}

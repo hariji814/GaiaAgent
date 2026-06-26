@@ -7,7 +7,7 @@
 >
 > 状态：草案
 > 版本：0.1.0
-> 许可证：CC BY-SA 4.0（规范）/ AGPL-3.0（实现）
+> 许可证：CC BY-SA 4.0（规范）/ Apache-2.0（实现）
 
 ---
 
@@ -157,7 +157,7 @@ Agent Descriptor 是 AURC Agent 的身份文档。它是身份、能力、协议
   "description": "Deep research with multi-source analysis",
   "version": "1.2.0",
   "author": "GaiaAgent Team",
-  "license": "AGPL-3.0",
+  "license": "Apache-2.0",
   "capabilities": {
     "provides": [
       {

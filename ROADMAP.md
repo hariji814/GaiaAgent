@@ -50,7 +50,7 @@ Work is organized into six tracks that move in parallel. Each item lists **what*
 | Item | Status | Why |
 |:---|:---:|---|
 | 9-state lifecycle state machine | ✅ | No protocol standardized agent lifecycle before AURC |
-| Policy-based error recovery (5 strategies) | ✅ | Agents must self-heal, not just crash |
+| Policy-based error recovery (6 strategies) | ✅ | Agents must self-heal, not just crash |
 | 4-scope context store (session/agent/shared/global) | ✅ | Memory isolation across tasks and agents |
 | Pause/resume via `asyncio.Event` | ✅ | HITL gates and resource waits |
 | **Durable lifecycle** (survive harness restart) | 🔜 | Long-running agents that outlive a process |
@@ -131,7 +131,7 @@ A credibility-oriented snapshot of what already runs end-to-end today (`python m
 
 - ✅ 8-layer stack: L0 Transport → L7 Discovery, each layer independently testable
 - ✅ `AURCId` URN identity + `AgentDescriptor` identity document
-- ✅ 9-state lifecycle engine with 5-strategy error recovery
+- ✅ 9-state lifecycle engine with 6-strategy error recovery
 - ✅ Unified Message Bus: `MessageRouter` (direct/bridge/broadcast/dead-letter), `SessionManager`, JSON/NDJSON codecs
 - ✅ Bidirectional bridges for **MCP, A2A, ACP** with capability mapping
 - ✅ HTTP/2 + WebSocket transports
@@ -152,7 +152,7 @@ Stating what we will *not* build is as important as what we will. These are deli
 |:---|:---|
 | ❌ **A competing agent protocol** | AURC *bridges* MCP/A2A/ACP, it does not replace them. "Bridge First, Don't Replace." |
 | ❌ **An LLM provider / model training** | Claude is one pluggable backend. GaiaAgent is protocol-agnostic about the model. |
-| ❌ **A closed/SaaS-only runtime** | Reference impl is AGPL-3.0; the spec is CC BY-SA 4.0. Open by construction. |
+| ❌ **A closed/SaaS-only runtime** | Reference impl is Apache-2.0; the spec is CC BY-SA 4.0. Open by construction. |
 | ❌ **Lock-in to one language** | Python is the reference; TS/Go/Rust SDKs are on the roadmap precisely to avoid this. |
 | ❌ **Blockchain/DID identity dependency** | AURC IDs are simple URNs — no ledger, no key-recovery ceremony required to start. |
 | ❌ **Breaking changes after v1.0** | Post-1.0, backward compatibility is a hard contract, governed by RFC. |

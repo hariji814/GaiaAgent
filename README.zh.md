@@ -637,7 +637,7 @@ pytest  # verify everything works
 
 | 组件 | 许可证 |
 |:---|:---|
-| **代码** | [AGPL-3.0](LICENSE) |
+| **代码** | [Apache-2.0](LICENSE) |
 | **协议规范** | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
 
 ---

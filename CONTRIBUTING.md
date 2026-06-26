@@ -336,7 +336,7 @@ Active contributors who demonstrate deep understanding of the codebase and proto
 
 By contributing to GaiaAgent, you agree that your contributions will be licensed under:
 
-- **Code**: [AGPL-3.0](LICENSE)
+- **Code**: [Apache-2.0](LICENSE)
 - **Documentation**: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 - **Protocol Specification**: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 

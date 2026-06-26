@@ -215,7 +215,7 @@ class AgentDescriptor(BaseModel):
     description: str = ""                            # Agent 描述
     version: str = "0.1.0"                           # 软件版本
     author: str = ""                                 # 作者
-    license: str = "AGPL-3.0"                        # 许可证
+    license: str = "Apache-2.0"                     # 许可证
     capabilities: Capabilities                       # 技能
     protocols: ProtocolSupport                       # 协议支持
     runtime: RuntimeRequirements                     # 运行时需求
@@ -775,7 +775,7 @@ def aurc_agent(
     description: str = "",
     version: str = "0.1.0",
     author: str = "",
-    license: str = "AGPL-3.0",
+    license: str = "Apache-2.0",
     protocols: list[str] | None = None,   # 外部协议
     tags: list[str] | None = None,
     consumes: list[str] | None = None,    # 需要的外部技能

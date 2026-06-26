@@ -7,7 +7,7 @@
 >
 > Status: Stable (v0.1 frozen)
 > Version: 0.1.0
-> License: CC BY-SA 4.0 (specification) / AGPL-3.0 (implementation)
+> License: CC BY-SA 4.0 (specification) / Apache-2.0 (implementation)
 
 ---
 
@@ -157,7 +157,7 @@ The Agent Descriptor is the identity document for an AURC agent. It serves as th
   "description": "Deep research with multi-source analysis",
   "version": "1.2.0",
   "author": "GaiaAgent Team",
-  "license": "AGPL-3.0",
+  "license": "Apache-2.0",
   "capabilities": {
     "provides": [
       {

@@ -336,7 +336,7 @@ Open questions for discussion.
 
 向 GaiaAgent 贡献，即表示你同意你的贡献按以下协议授权：
 
-- **代码**：[AGPL-3.0](LICENSE)
+- **代码**：[Apache-2.0](LICENSE)
 - **文档**：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 - **协议规范**：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
