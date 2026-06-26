@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .audit_sink import AuditSink
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +130,21 @@ class AuditLog:
         audit.export_to_file("audit.json")
     """
 
-    def __init__(self, max_entries: int = 10000) -> None:
-        self._entries: deque[AuditEntry] = deque(maxlen=max_entries)
+    def __init__(
+        self,
+        max_entries: int = 10000,
+        sink: AuditSink | None = None,
+    ) -> None:
+        """Create an audit log backed by *sink* (default: in-memory ring buffer).
+
+        Pass a ``FileAuditSink`` for real-time file persistence + rotation.
+        """
+        if sink is not None:
+            self._sink = sink
+        else:
+            from .audit_sink import MemoryAuditSink
+
+            self._sink = MemoryAuditSink(max_entries=max_entries)
         self._max_entries = max_entries
 
     def log(
@@ -154,8 +169,13 @@ class AuditLog:
             protocol=protocol,
             details=details or {},
         )
-        self._entries.append(entry)
+        self._sink.append(entry)
         return entry
+
+    @property
+    def _entries(self) -> list[AuditEntry]:
+        """Live view of the backing sink's entries."""
+        return self._sink.entries()
 
     # =========================================================================
     # Queries / 查询
@@ -226,7 +246,7 @@ class AuditLog:
 
     @property
     def count(self) -> int:
-        return len(self._entries)
+        return self._sink.count
 
     # =========================================================================
     # Export / 导出
@@ -262,6 +282,4 @@ class AuditLog:
 
     def clear(self) -> int:
         """Clear all entries. Returns count cleared."""
-        count = len(self._entries)
-        self._entries.clear()
-        return count
+        return self._sink.clear()
