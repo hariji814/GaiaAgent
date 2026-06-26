@@ -4,6 +4,7 @@
 
 from .dashboard import DashboardAPI, HealthDashboard
 from .metrics import PROMETHEUS_CONTENT_TYPE, PrometheusMetricsExporter
+from .otel import OTelSpanExporter
 from .tracing import BridgeTraceRecorder, TraceSpan
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "PROMETHEUS_CONTENT_TYPE",
     "BridgeTraceRecorder",
     "TraceSpan",
+    "OTelSpanExporter",
 ]

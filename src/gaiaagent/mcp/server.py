@@ -63,6 +63,8 @@ class AURCMCPStdioServer:
         bridge: Any | None = None,
         router: Any | None = None,
         trace_recorder: Any | None = None,
+        authz_engine: Any | None = None,
+        authz_caller_id: str | None = None,
     ) -> None:
         self._agent = agent
         descriptor = getattr(agent, "aurc_descriptor", None) or getattr(
@@ -83,6 +85,11 @@ class AURCMCPStdioServer:
         self._bridge = bridge or MCPBridge()
         self._router = router or MessageRouter()
         self._trace_recorder = trace_recorder
+        # CapABAC authorization gate (Step 3 wiring). When set, every tools/call
+        # is authorized before routing; denied calls return isError without
+        # reaching the skill. None = no authz (backward compatible).
+        self._authz_engine = authz_engine
+        self._authz_caller_id = authz_caller_id
         self._router.register_handler(self._agent_id, self._dispatch_skill)
         logger.info("AURC MCP server fronting %s", self._agent_id)
 
@@ -167,9 +174,34 @@ class AURCMCPStdioServer:
     async def _handle_tools_call(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         """Translate tools/call via MCPBridge → route via MessageRouter → MCP result.
         经 MCPBridge 翻译 tools/call → MessageRouter 路由 → MCP 结果
+
+        If an ``authz_engine`` is configured, the tool call is authorized
+        against the CapABAC policy *before* routing. Denied calls return an
+        ``isError`` result without invoking the skill handler.
         """
         name = params.get("name", "")
         arguments = params.get("arguments", {}) or {}
+
+        # CapABAC gate — authorize before routing to the skill.
+        if self._authz_engine is not None:
+            caller = self._authz_caller_id or "mcp:anonymous"
+            authz_result = self._authz_engine.authorize(
+                agent_id=caller,
+                resource_type=name,
+                action="call",
+                attributes=arguments,
+            )
+            if not authz_result.allowed:
+                logger.warning(
+                    "MCP authz denied: caller=%s tool=%s reason=%s",
+                    caller, name, authz_result.reason,
+                )
+                return _result(req_id, {
+                    "content": [{"type": "text",
+                                 "text": f"Authorization denied: {authz_result.reason}"}],
+                    "isError": True,
+                })
+
         # `translate_to_aurc` mints correlation_id (from msg id) + bridge_chain.
         mcp_message = {
             "jsonrpc": "2.0",

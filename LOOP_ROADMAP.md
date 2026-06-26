@@ -11,8 +11,8 @@
 
 | | |
 |:---|:---|
-| **Current state** | ✅ **Shipped.** `ClaudeLLM.agentic_loop` delegates to the `claude` CLI (`claude -p --output-format stream-json`) when on PATH, with a safe subprocess wrapper (concurrent stdout/stderr drain, timeout, kill-on-cancel) and defensive stream-json parsing. Falls back to the built-in `anthropic`-based loop otherwise. ✅ **MCP server shipped** (`gaiaagent.mcp.server`) — exposes AURC `@skill` agents as MCP tools so CLI tool calls enter the bus at the protocol level. 322 tests passing. The `codex` CLI (`codex exec --json`) is now a second reference backend via the same adapter shape; the `backend` parameter (`claude` / `codex` / `auto`) makes the pluggable seam real, not aspirational. |
-| **Honest assessment** | The README claim "Claude-native" is now substantive for the *loop delegation* and *MCP exposure* of skills. **Now wired**: the `backend` parameter on `ClaudeLLM` makes the pluggable loop seam real — `claude` and `codex` CLI backends are interchangeable, `auto` picks the first on PATH. **Not yet wired**: lifecycle (the harness does not drive `agentic_loop`), CapABAC gating of CLI tool calls, session/resume tied to `ContextStore`. The concept-mapping table marks each row's status. |
+| **Current state** | ✅ **Shipped.** `ClaudeLLM.agentic_loop` delegates to the `claude` CLI (`claude -p --output-format stream-json`) when on PATH, with a safe subprocess wrapper (concurrent stdout/stderr drain, timeout, kill-on-cancel) and defensive stream-json parsing. Falls back to the built-in `anthropic`-based loop otherwise. ✅ **MCP server shipped** (`gaiaagent.mcp.server`) — exposes AURC `@skill` agents as MCP tools so CLI tool calls enter the bus at the protocol level. ✅ **Step 3 governance wiring shipped**: lifecycle integration (`RuntimeHarness.run_with_lifecycle` drives the loop through the 9-state state machine with error recovery/retry), CapABAC gating (`AURCMCPStdioServer` authorizes `tools/call` via `AuthorizationEngine` before routing), OTel trace export (`OTelSpanExporter` maps `TraceSpan` → OpenTelemetry spans with graceful degradation), and `LoopBackend` Protocol (formal contract for CLI backends). 352 tests passing. The `codex` CLI (`codex exec --json`) is now a second reference backend via the same adapter shape; the `backend` parameter (`claude` / `codex` / `auto`) makes the pluggable seam real, not aspirational. |
+| **Honest assessment** | The README claim "Claude-native" is now substantive for the *loop delegation*, *MCP exposure* of skills, and the *governance layer* around the loop. **Now wired**: the `backend` parameter on `ClaudeLLM` makes the pluggable loop seam real — `claude` and `codex` CLI backends are interchangeable, `auto` picks the first on PATH. `RuntimeHarness.run_with_lifecycle` drives the CLI loop through the full 9-state lifecycle (start → RUNNING → complete or report_error → recovery → retry), and `ClaudeLLM.run_managed_loop` is the end-to-end integration point. CapABAC `AuthorizationEngine` gates `tools/call` inside the MCP server. `OTelSpanExporter` exports `TraceSpan`s to OpenTelemetry (graceful no-op when OTel absent). `LoopBackend` Protocol formalizes the backend contract. **Not yet wired**: session/resume tied to `ContextStore`, CLI-native tools as AURC skills (reverse direction of Step 1). The concept-mapping table marks each row's status. |
 | **Dependency status** | **No new Python dependency.** The `claude` and `codex` CLIs are external runtime requirements, detected on PATH at runtime. `pyproject.toml`'s `claude` extra keeps `anthropic>=0.40` for the fallback path. |
 
 > This is a **living** document; status reflects the code at HEAD. The CLI's `stream-json` event schema is parsed defensively (`.get()` throughout, `isinstance` guards, empty-stream → error not silent success).
@@ -74,7 +74,7 @@ rows are implemented; the rest are Step 3+ work.
 |:---|:---|:---|:---:|
 | `--resume <session>` / session ID | 4-scope `ContextStore` | CLI session id stored in AURC session scope; cross-protocol agents resume the same loop. | 🔜 |
 | subagents (`.claude/agents`) | AURC delegation hop | Spawning a CLI subagent = one delegation hop; CapABAC enforces scopes only narrow. | 🔜 |
-| `--permission-mode` | CapABAC `AuthorizationEngine.authorize` | Permission mode maps to a CapABAC policy; denied tool → `is_error` fed back. | 🔜 |
+| `--permission-mode` | CapABAC `AuthorizationEngine.authorize` | Permission mode maps to a CapABAC policy; denied tool → `is_error` fed back. `AURCMCPStdioServer` now gates `tools/call` via `authz_engine`. | ✅ |
 | hooks (`settings.json` Pre/PostToolUse) | state-change listeners + HITL gate | CLI hooks bridge to AURC HITL, audit, metrics. | 🔜 |
 | `--output-format json` + schema | `SkillDeclaration.output_schema` | CLI structured output aligns with AURC skill return schema. | 🔜 |
 | `--allowed-tools` / native tools | `ClaudeTool` ← `@skill` methods | `ClaudeTool.from_aurc_skill` exposes AURC skills as tool defs; `--allowed-tools` is plumbed end-to-end. | ✅ |
@@ -152,21 +152,42 @@ claude adapter shape — same `run_agentic_loop` signature, same
 The AURC MCP server (`gaiaagent.mcp.server`) works with both CLIs identically.
 Covered by `tests/test_codex_integration.py` (23 tests).
 
-### Step 3 — Remaining AURC Governance Wiring  🔜
+### Step 3 — AURC Governance Around the Loop  ✅
 
 The loop delegates and routes tool calls at the protocol layer (Steps 1 & 2).
-What is *not* yet wired is the AURC runtime *around* the loop:
+Step 3 wires the AURC runtime *around* the loop — the governance that makes
+the CLI path a first-class AURC citizen, not just a subprocess:
 
-- **Lifecycle**: `RuntimeHarness` does not yet drive `agentic_loop` — the
-  `READY → RUNNING` transition and `report_error` recovery are not invoked
-  from the CLI path. Map `stop_reason` (already mapped to `RecoveryAction`)
-  into `RuntimeHarness.report_error`.
-- **CapABAC gating**: `--permission-mode` is passed through but
-  `AuthorizationEngine.authorize` is not called on each tool call. Gate
-  `tools/call` inside the MCP server via the authz engine.
-- **Session/resume**: `--resume` is not emitted and the CLI session id is not
-  persisted in `ContextStore` session scope.
-- **CLI-native tools as AURC skills** (the reverse direction of Step 1).
+- **Lifecycle** ✅: `RuntimeHarness.run_with_lifecycle(agent_id, loop,
+  get_stop_reason=...)` drives the CLI loop through the full 9-state
+  lifecycle — `start()` → RUNNING, run the loop, then `complete()` on a
+  clean stop or `report_error()` → RECOVERING → READY → retry on an error
+  `stop_reason`. The retry loop re-checks the result so recovered attempts
+  also get `complete()` or further recovery. `ClaudeLLM.run_managed_loop()`
+  is the end-to-end integration point: it calls the active backend's
+  `stop_reason_to_recovery_action` to extract the stop_reason, then delegates
+  to `run_with_lifecycle`. Covered by `tests/test_lifecycle_loop.py` (9 tests).
+- **CapABAC gating** ✅: `AURCMCPStdioServer.__init__` accepts an optional
+  `authz_engine` and `authz_caller_id`. In `_handle_tools_call`, every tool
+  call is authorized via `AuthorizationEngine.authorize(caller, tool_name,
+  "call", arguments)` *before* routing through the bus. Denied calls return
+  an `isError` result without invoking the skill. When `authz_engine` is
+  `None` (the default), all calls pass through — fully backward compatible.
+  Covered by `tests/test_mcp_authz.py` (6 tests).
+- **OTel trace export** ✅: `OTelSpanExporter` (in `observability/otel.py`)
+  maps recorded `TraceSpan`s onto OpenTelemetry trace spans with stable
+  attribute names (`aurc.correlation_id`, `aurc.bridge_chain`, …). When
+  `opentelemetry` is not installed, `export()` is a no-op that logs at DEBUG
+  — the exporter is safe to wire unconditionally. Covered by
+  `tests/test_otel_exporter.py` (7 tests, 1 skipped when OTel absent).
+- **LoopBackend Protocol** ✅: `integrations/base.py` formalizes the CLI
+  backend contract as a `@runtime_checkable` `LoopBackend` Protocol
+  (`cli_available`, `prompt_too_long`, `stop_reason_to_recovery_action`,
+  `run_agentic_loop`). Both `claude_cli` and `codex_cli` satisfy it.
+  Covered by `tests/test_loop_backend.py` (9 tests).
+- **Session/resume** 🔜: `--resume` is not yet emitted and the CLI session id
+  is not persisted in `ContextStore` session scope.
+- **CLI-native tools as AURC skills** 🔜 (the reverse direction of Step 1).
 
 **Note:** the original "override `_execute_tool` to route via the bus" plan is
 **dropped** — that seam only exists on the fallback path; on the CLI path bus

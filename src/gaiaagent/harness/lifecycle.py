@@ -430,6 +430,65 @@ class RuntimeHarness:
             instance.transition_to(AgentState.READY)
         return True
 
+    async def run_with_lifecycle(
+        self,
+        agent_id: str,
+        loop: "Callable[[], Awaitable[Any]]",
+        *,
+        get_stop_reason: "Callable[[Any], str | None] | None" = None,
+    ) -> Any:
+        """Run a loop callable with full AURC lifecycle management.
+
+        Transitions the agent through: start() -> RUNNING, run the loop,
+        then either complete() on success or report_error() -> recovery ->
+        retry on failure. This is the integration point between the AURC
+        lifecycle layer and the agentic-loop layer: CLI backends
+        (claude_cli / codex_cli) return a response whose stop_reason is
+        mapped to a RecoveryAction via stop_reason_to_recovery_action;
+        this method feeds that into the harness recovery model.
+
+        Args:
+            agent_id: The registered agent's AURC ID.
+            loop: Async callable that runs the agent loop and returns a
+                result. The result is opaque to the harness; only
+                get_stop_reason inspects it.
+            get_stop_reason: Optional extractor that reads a stop_reason
+                string from the loop result. Returns None for a clean
+                completion (nothing to recover). If not provided, every
+                loop run is treated as a clean completion.
+
+        Returns:
+            The final loop result (from the last attempt).
+        """
+        await self.start(agent_id, new_task=True)
+        result = await loop()
+
+        stop_reason = get_stop_reason(result) if get_stop_reason else None
+
+        if stop_reason is None:
+            # Clean completion
+            await self.complete(agent_id)
+            return result
+
+        # Error stop_reason -> trigger recovery, retry if recovered.
+        # Loop so that retry results go through the same completion/error
+        # check instead of bypassing complete() on the second attempt.
+        while stop_reason is not None:
+            recovered = await self.report_error(
+                agent_id, f"loop stopped: {stop_reason}"
+            )
+            if not recovered:
+                # Exceeded max retries -> agent is FAILED
+                return result
+            # Recovered -> agent is back to READY, retry the loop
+            await self.start(agent_id)
+            result = await loop()
+            stop_reason = get_stop_reason(result) if get_stop_reason else None
+
+        # Clean completion (either first attempt or after successful retry)
+        await self.complete(agent_id)
+        return result
+
     # =========================================================================
     # Health Monitoring / 健康监控
     # =========================================================================

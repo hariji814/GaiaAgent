@@ -432,6 +432,65 @@ class ClaudeLLM:
             prompt=prompt, tools=tools, max_turns=max_turns, system=system
         )
 
+    async def run_managed_loop(
+        self,
+        harness: Any,
+        agent_id: str,
+        prompt: str,
+        tools: list[ClaudeTool] | None = None,
+        max_turns: int = 10,
+        system: str | None = None,
+        *,
+        correlation_id: str | None = None,
+    ) -> ClaudeResponse:
+        """Run agentic_loop with AURC lifecycle management.
+
+        Wraps agentic_loop with the harness lifecycle: start -> run ->
+        complete on success, or report_error -> recovery -> retry on
+        failure. The stop_reason from the CLI/built-in backend is mapped
+        to a RecoveryAction via stop_reason_to_recovery_action; a clean
+        end_turn maps to None (nothing to recover).
+
+        Args:
+            harness: A RuntimeHarness with the agent already registered.
+            agent_id: The registered agent's AURC ID.
+            prompt: Initial user message.
+            tools: Available tools with handlers.
+            max_turns: Maximum tool-use turns.
+            system: System prompt.
+            correlation_id: Optional AURC correlation id for trace linkage.
+
+        Returns:
+            Final ClaudeResponse after all tool calls complete (or the
+            last attempt if recovery was exhausted).
+        """
+        from . import claude_cli, codex_cli
+
+        def _extract_stop_reason(resp: ClaudeResponse) -> str | None:
+            # Try the active backend's mapping; fall back to claude_cli's.
+            mapping = (
+                codex_cli.stop_reason_to_recovery_action
+                if (self._backend or "claude") == "codex"
+                else claude_cli.stop_reason_to_recovery_action
+            )
+            action = mapping(resp.stop_reason)
+            return None if action is None else resp.stop_reason
+
+        async def _loop() -> ClaudeResponse:
+            return await self.agentic_loop(
+                prompt=prompt,
+                tools=tools,
+                max_turns=max_turns,
+                system=system,
+                correlation_id=correlation_id,
+            )
+
+        return await harness.run_with_lifecycle(
+            agent_id,
+            _loop,
+            get_stop_reason=_extract_stop_reason,
+        )
+
     async def _execute_tool(
         self, tool: ClaudeTool | None, tool_input: dict[str, Any]
     ) -> dict[str, Any]:

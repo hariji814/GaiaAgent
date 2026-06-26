@@ -11,8 +11,8 @@
 
 | | |
 |:---|:---|
-| **当前状态** | ✅ **已发布。** `ClaudeLLM.agentic_loop` 在 `claude` CLI 在 PATH 时委托给 `claude -p --output-format stream-json`,带安全子进程包装(并发 stdout/stderr 排空、超时、取消即 kill)与防御性 stream-json 解析;否则降级到内置 `anthropic` 循环。✅ **MCP server 已发布**(`gaiaagent.mcp.server`)——把 AURC `@skill` agent 暴露为 MCP 工具,CLI 的工具调用在协议层进入总线。2322 测试通过。`codex` CLI(`codex exec --json`)现为第二个参考后端,通过同一适配器形状;参数 `backend`(`claude` / `codex` / `auto`)使可插拔缝变为真实,而非仅愿景。 |
-| **诚实评估** | README 的"Claude-native"对*循环委托*与 skill 的 *MCP 暴露*已是实质承诺。**现已接通**:`backend` 参数使可插拔 loop 缝变为真实 — `claude` 与 `codex` CLI 后端可互换,`auto` 选择 PATH 上第一个可用 CLI。**尚未接通**:生命周期(harness 不驱动 `agentic_loop`)、CLI 工具调用的 CapABAC 鉴权、session/resume 与 `ContextStore` 绑定。概念映射表标注了每行状态。 |
+| **当前状态** | ✅ **已发布。** `ClaudeLLM.agentic_loop` 在 `claude` CLI 在 PATH 时委托给 `claude -p --output-format stream-json`,带安全子进程包装(并发 stdout/stderr 排空、超时、取消即 kill)与防御性 stream-json 解析;否则降级到内置 `anthropic` 循环。✅ **MCP server 已发布**(`gaiaagent.mcp.server`)——把 AURC `@skill` agent 暴露为 MCP 工具,CLI 的工具调用在协议层进入总线。✅ **Step 3 治理接通已发布**:生命周期集成(`RuntimeHarness.run_with_lifecycle` 驱动 loop 走完 9 态状态机,含错误恢复/重试)、CapABAC 鉴权门(`AURCMCPStdioServer` 在路由前用 `AuthorizationEngine` 鉴权 `tools/call`)、OTel 追踪导出(`OTelSpanExporter` 把 `TraceSpan` 映射为 OpenTelemetry span,带优雅降级)、`LoopBackend` 协议(CLI 后端正式契约)。352 测试通过。`codex` CLI(`codex exec --json`)现为第二个参考后端,通过同一适配器形状;参数 `backend`(`claude` / `codex` / `auto`)使可插拔缝变为真实,而非仅愿景。 |
+| **诚实评估** | README 的"Claude-native"对*循环委托*、skill 的 *MCP 暴露*、以及 loop 周围的*治理层*已是实质承诺。**现已接通**:`backend` 参数使可插拔 loop 缝变为真实 — `claude` 与 `codex` CLI 后端可互换,`auto` 选择 PATH 上第一个可用 CLI。`RuntimeHarness.run_with_lifecycle` 驱动 CLI loop 走完完整 9 态生命周期(start → RUNNING → complete 或 report_error → 恢复 → 重试),`ClaudeLLM.run_managed_loop` 是端到端集成点。CapABAC `AuthorizationEngine` 在 MCP server 内对 `tools/call` 加鉴权门。`OTelSpanExporter` 把 `TraceSpan` 导出为 OpenTelemetry(OTel 缺失时优雅降级为 no-op)。`LoopBackend` 协议形式化后端契约。**尚未接通**:session/resume 与 `ContextStore` 绑定、CLI 原生工具作为 AURC skill(Step 1 的反方向)。概念映射表标注了每行状态。 |
 | **依赖状态** | **不新增 Python 依赖。** `claude` CLI 是外部运行时要求,运行时在 PATH 上探测。`pyproject.toml` 的 `claude` extra 保留 `anthropic>=0.40` 作降级路径。 |
 
 > 本文档**持续更新**,状态反映 HEAD 处代码。CLI 的 `stream-json` 事件 schema 采用防御性解析(全用 `.get()`、`isinstance` 守卫、空流 → 报错而非静默成功)。
@@ -112,14 +112,16 @@ Step 1、2 已发布。Step 3(剩余治理接通)重新定调:原"覆写 `_execu
 
 `ClaudeLLM.agentic_loop` 在 CLI 在 PATH 且无调用方传入的 Python tool handler 需进程内执行时委托给 `claude -p … --output-format stream-json`;否则降级到内置循环。公开 API 不变。子进程安全:`communicate()`(并发排空、无死锁)、可选 `timeout`、超时/取消 `try/finally` kill(无泄漏 `ANTHROPIC_API_KEY` 的孤儿 `claude`)。防御性解析:空流 → `stop_reason="error"`(非静默成功)、`isinstance` 守卫、正确的 `stop_reason` 优先级。接通 `stop_reason → RecoveryAction` 映射 + 可选 `usage → BridgeTraceRecorder` 追踪。由 `tests/test_claude_integration.py::TestClaudeCLIBackend` 覆盖。
 
-### Step 3 — 剩余 AURC 治理接通  🔜
+### Step 3 — 围绕 Loop 的 AURC 治理接通  ✅
 
-loop 已委托、工具调用已在协议层路由(Step 1、2)。尚未接通的是围绕 loop 的 AURC 运行时:
+loop 已委托、工具调用已在协议层路由(Step 1、2)。Step 3 接通围绕 loop 的 AURC 运行时——让 CLI 路径成为 AURC 的一等公民,而非仅子进程:
 
-- **生命周期**:`RuntimeHarness` 尚不驱动 `agentic_loop`——`READY → RUNNING` 转换与 `report_error` 恢复未在 CLI 路径触发。把已映射的 `stop_reason → RecoveryAction` 接入 `RuntimeHarness.report_error`。
-- **CapABAC 鉴权**:`--permission-mode` 透传但每次工具调用未调 `AuthorizationEngine.authorize`。在 MCP server 内对 `tools/call` 加鉴权门。
-- **session/resume**:未发 `--resume`,CLI 会话 id 未存入 `ContextStore` session scope。
-- **CLI 原生工具作为 AURC skill**(Step 1 的反方向)。
+- **生命周期** ✅:`RuntimeHarness.run_with_lifecycle(agent_id, loop, get_stop_reason=...)` 驱动 CLI loop 走完整 9 态生命周期——`start()` → RUNNING,跑 loop,然后 clean stop 时 `complete()`、error `stop_reason` 时 `report_error()` → RECOVERING → READY → 重试。重试循环重新检查结果,使恢复后的尝试也走 `complete()` 或进一步恢复。`ClaudeLLM.run_managed_loop()` 是端到端集成点:调活跃后端的 `stop_reason_to_recovery_action` 提取 stop_reason,再委托 `run_with_lifecycle`。由 `tests/test_lifecycle_loop.py` 覆盖(9 测试)。
+- **CapABAC 鉴权** ✅:`AURCMCPStdioServer.__init__` 接受可选 `authz_engine` 与 `authz_caller_id`。在 `_handle_tools_call` 中,每次工具调用经 `AuthorizationEngine.authorize(caller, tool_name, "call", arguments)` 鉴权*然后*才走总线路由。拒绝的调用返回 `isError` 结果,不调 skill。`authz_engine` 为 `None`(默认)时全部放行——完全向后兼容。由 `tests/test_mcp_authz.py` 覆盖(6 测试)。
+- **OTel 追踪导出** ✅:`OTelSpanExporter`(`observability/otel.py`)把已记录的 `TraceSpan` 映射为 OpenTelemetry trace span,带稳定属性名(`aurc.correlation_id`、`aurc.bridge_chain` 等)。`opentelemetry` 未安装时 `export()` 为 no-op 并 DEBUG 级日志——导出器可无条件接通。由 `tests/test_otel_exporter.py` 覆盖(7 测试,OTel 缺失时 1 跳过)。
+- **LoopBackend 协议** ✅:`integrations/base.py` 以 `@runtime_checkable` `LoopBackend` Protocol 形式化 CLI 后端契约(`cli_available`、`prompt_too_long`、`stop_reason_to_recovery_action`、`run_agentic_loop`)。`claude_cli` 与 `codex_cli` 均满足。由 `tests/test_loop_backend.py` 覆盖(9 测试)。
+- **session/resume** 🔜:未发 `--resume`,CLI 会话 id 未存入 `ContextStore` session scope。
+- **CLI 原生工具作为 AURC skill** 🔜(Step 1 的反方向)。
 
 **注:** 原"覆写 `_execute_tool` 走总线"方案**已弃**——该缝点仅存在于降级路径;CLI 路径的总线路由是 MCP server 的职责(Step 1,已完成)。
 
