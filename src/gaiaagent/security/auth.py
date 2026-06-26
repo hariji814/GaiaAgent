@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from .key_store import KeyStore, MemoryKeyStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,9 +68,10 @@ class APIKeyAuthenticator:
         result = auth.authenticate(key)
     """
 
-    def __init__(self) -> None:
-        # key_hash → (agent_id, scopes, created_at) / 键哈希 → (Agent ID, 权限, 创建时间)
-        self._keys: dict[str, tuple[str, list[str], datetime]] = {}
+    def __init__(self, store: KeyStore | None = None) -> None:
+        # Storage is delegated to a KeyStore (memory by default, SQLite for
+        # cross-restart persistence) / 存储委托给 KeyStore（默认内存，SQLite 可跨重启）
+        self._store: KeyStore = store if store is not None else MemoryKeyStore()
 
     def create_key(
         self,
@@ -89,11 +92,7 @@ class APIKeyAuthenticator:
         """
         raw_key = f"{prefix}_{secrets.token_urlsafe(32)}"
         key_hash = self._hash_key(raw_key)
-        self._keys[key_hash] = (
-            agent_id,
-            scopes or [],
-            datetime.now(timezone.utc),
-        )
+        self._store.store(key_hash, agent_id, scopes or [], datetime.now(timezone.utc))
         logger.info("API key created for agent '%s'", agent_id)
         return raw_key
 
@@ -108,7 +107,7 @@ class APIKeyAuthenticator:
             AuthResult with authentication status / 包含认证状态的 AuthResult
         """
         key_hash = self._hash_key(raw_key)
-        entry = self._keys.get(key_hash)
+        entry = self._store.lookup(key_hash)
 
         if entry is None:
             return AuthResult(authenticated=False, error="Invalid API key")
@@ -124,25 +123,18 @@ class APIKeyAuthenticator:
     def revoke_key(self, raw_key: str) -> bool:
         """Revoke an API key. 吊销 API Key"""
         key_hash = self._hash_key(raw_key)
-        if key_hash in self._keys:
-            del self._keys[key_hash]
+        if self._store.delete(key_hash):
             logger.info("API key revoked")
             return True
         return False
 
     def revoke_agent_keys(self, agent_id: str) -> int:
         """Revoke all keys for an agent. 吊销 Agent 的所有 Key"""
-        to_remove = [
-            h for h, (aid, _, _) in self._keys.items()
-            if aid == agent_id
-        ]
-        for h in to_remove:
-            del self._keys[h]
-        return len(to_remove)
+        return self._store.delete_agent(agent_id)
 
     @property
     def key_count(self) -> int:
-        return len(self._keys)
+        return self._store.count()
 
     @staticmethod
     def _hash_key(raw_key: str) -> str:

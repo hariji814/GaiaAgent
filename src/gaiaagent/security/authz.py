@@ -19,8 +19,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from .policy_store import MemoryPolicyStore, PolicyStore
 
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Policy Models / 策略模型
@@ -175,22 +176,22 @@ class AuthorizationEngine:
         )
     """
 
-    def __init__(self) -> None:
-        self._policies: dict[str, AgentPolicy] = {}
+    def __init__(self, store: PolicyStore | None = None) -> None:
+        self._store: PolicyStore = store if store is not None else MemoryPolicyStore()
         self._rate_limiter = RateLimiter()
 
     def set_policy(self, agent_id: str, policy: AgentPolicy) -> None:
         """Set authorization policy for an agent. 设置 Agent 的授权策略"""
-        self._policies[agent_id] = policy
+        self._store.save(policy)
         logger.info("Policy set for agent '%s': %d rules", agent_id, len(policy.rules))
 
     def get_policy(self, agent_id: str) -> AgentPolicy | None:
         """Get an agent's policy. 获取 Agent 的策略"""
-        return self._policies.get(agent_id)
+        return self._store.load(agent_id)
 
     def remove_policy(self, agent_id: str) -> bool:
         """Remove an agent's policy. 移除 Agent 的策略"""
-        return self._policies.pop(agent_id, None) is not None
+        return self._store.delete(agent_id)
 
     def authorize(
         self,
@@ -211,7 +212,7 @@ class AuthorizationEngine:
         Returns:
             AuthzResult with the decision / 包含决策的 AuthzResult
         """
-        policy = self._policies.get(agent_id)
+        policy = self._store.load(agent_id)
         if not policy:
             return AuthzResult(
                 allowed=False,

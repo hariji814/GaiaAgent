@@ -14,11 +14,11 @@
 | **Phase 1** 一键 demo | ✅ 完成 | `_cmd_serve` 接 `AURCServer.http_handler` 真路由；`gaiaagent demo` + `examples/e2e_cross_process.py` 跨进程真 HTTP（add→42、multiply→42，correlation_id 端到端） |
 | **Phase 2** 堵空壳 | ✅ 完成 | `_invoke_skill` 真路由修复；lifecycle/orchestrator/router 空壳补齐（commit c2e0633）；行为测试覆盖 |
 | **Phase 3** 推广物料 | ✅ 完成 | why-gaiaagent.md/SECURITY/GOVERNANCE/ADOPTERS/CODE_OF_CONDUCT/CHANGELOG/issue 模板齐备 |
-| **Phase 4** 生产持久化 | ✅ 完成 (4.1-4.4) | 4.1 AgentRegistry/MessageBus Protocol + TTL 驱逐;4.2 AuditSink/TraceSink Protocol + FileAuditSink/FileTraceSink 实时持久化+轮转;4.3 HTTP 连接池+重试+超时、WebSocket 心跳、HTTPServer 优雅排空+超时强退+SIGTERM 钩子;4.4 BridgeAuthzGuard fail-closed 桥接授权 + Ed25519 委托签名 + DelegationValidator 验签 |
+| **Phase 4** 生产持久化 | ✅ 完成 (4.1-4.4) | 4.1 AgentRegistry/MessageBus Protocol + TTL 驱逐;4.2 AuditSink/TraceSink Protocol + FileAuditSink/FileTraceSink 实时持久化+轮转、KeyStore/PolicyStore Protocol + MemoryKeyStore/SQLiteKeyStore/MemoryPolicyStore/SQLitePolicyStore 跨重启持久化（API key 与 CapABAC 策略）;4.3 HTTP 连接池+重试+超时、WebSocket 心跳、HTTPServer 优雅排空+超时强退+SIGTERM 钩子;4.4 BridgeAuthzGuard fail-closed 桥接授权 + Ed25519 委托签名 + DelegationValidator 验签 |
 
-**验证门槛**：469 passed / 2 skipped；ruff 0 错；mypy strict 0 错（48 源文件）；`uv build` 0.1.1 sdist+wheel 双产物干净。
+**验证门槛**：480 passed / 2 skipped；ruff 0 错；mypy strict 0 错（56 源文件）；`uv build` 0.1.1 sdist+wheel 双产物干净。
 
-**发版阻塞项（唯一外部动作）**：gaiaagent 未上 PyPI（404）。已 bump 0.1.0→0.1.1、本地构建通过。需：① GitHub→Settings→Secrets 配置 PyPI trusted publisher；② 合并 `loop-cli-integration`→`main`；③ 推 `v0.1.1` tag 触发 `release.yml`（test job 已 gate publish）。
+**发版策略（已调整）**：PyPI 发布取消——优先 git 源码 + `pip install -e .` 本地装推进广与试点，不上 PyPI 中心仓。版本 0.1.1，本地 `uv build` sdist+wheel 双产物干净。后续合并 `loop-cli-integration`→`main` 即可作为推广基线。
 
 ## 三根支柱
 
@@ -131,9 +131,9 @@
 - registry/local.py 心跳补 TTL/驱逐(stale agent 不应永久可发现)
 
 ### 4.2 持久化三件套
-- API key / CapABAC 策略落 SQLite(单机)或 Redis(多副本)
-- audit.py 实时写文件 + 轮转(或接 OTel logs)
-- trace recorder 持久化或直连 OTel(目前手动 flush)
+- ✅ API key / CapABAC 策略落 SQLite(单机)或 Redis(多副本) — KeyStore/PolicyStore Protocol + SQLiteKeyStore/SQLitePolicyStore（WAL、JSON 字段、跨重启存活，11 项持久化测试）
+- ✅ audit.py 实时写文件 + 轮转(或接 OTel logs) — AuditSink/TraceSink Protocol + FileAuditSink/FileTraceSink
+- ⏳ trace recorder 持久化或直连 OTel(目前手动 flush) — Sink Protocol 已就绪，OTel exporter 待接
 
 ### 4.3 传输可靠性
 - httpx client 长生命连接池 + 重试 + 超时外部化
