@@ -48,9 +48,17 @@ class WebSocketTransportServer:
         await server.start()
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 8765) -> None:
+    def __init__(
+        self,
+        host: str = "0.0.0.0",
+        port: int = 8765,
+        ping_interval: float = 20.0,
+        ping_timeout: float = 10.0,
+    ) -> None:
         self._host = host
         self._port = port
+        self._ping_interval = ping_interval
+        self._ping_timeout = ping_timeout
         self._handler: WebSocketMessageHandler | None = None
         self._server: Any = None  # websockets.Server instance / websockets 服务器实例
         self._running = False
@@ -98,6 +106,11 @@ class WebSocketTransportServer:
                 self._port,
                 # Allow large messages / 允许大消息
                 max_size=10 * 1024 * 1024,  # 10 MB
+                # Heartbeat: server pings idle clients every ping_interval
+                # and drops them if no pong within ping_timeout. This detects
+                # half-open connections (NAT timeout, dead peers) proactively.
+                ping_interval=self._ping_interval,
+                ping_timeout=self._ping_timeout,
             )
             # Block until the server is closed / 阻塞直到服务器关闭
             await self._server.wait_closed()
@@ -285,6 +298,7 @@ class WebSocketTransportClient:
         timeout: float = 30.0,
         reconnect: bool = True,
         max_reconnect_delay: float = _DEFAULT_MAX_RECONNECT_DELAY,
+        heartbeat_interval: float = 20.0,
     ) -> None:
         """Initialize the WebSocket client. 初始化 WebSocket 客户端
 
@@ -293,14 +307,19 @@ class WebSocketTransportClient:
             timeout: Connection timeout in seconds / 连接超时秒数
             reconnect: Enable automatic reconnection / 启用自动重连
             max_reconnect_delay: Maximum reconnection delay in seconds / 最大重连延迟秒数
+            heartbeat_interval: Seconds between client-initiated pings
+                (keeps NAT/firewall mappings alive and detects dead peers).
+                客户端 ping 间隔秒数（保活 NAT/防火墙映射并检测死亡对端）。
         """
         self._url = url
         self._timeout = timeout
         self._reconnect_enabled = reconnect
         self._max_reconnect_delay = max_reconnect_delay
+        self._heartbeat_interval = heartbeat_interval
         self._ws: Any = None  # websockets.ClientConnection / websockets 客户端连接
         self._connected = False
         self._listener_task: asyncio.Task[None] | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
         self._closing = False  # Flag to prevent reconnection during close / 关闭时阻止重连的标志
 
     async def connect(self) -> None:
@@ -331,6 +350,7 @@ class WebSocketTransportClient:
             )
             self._connected = True
             self._closing = False
+            self._start_heartbeat()
             logger.info("WebSocket client connected to %s", self._url)
         except asyncio.TimeoutError as e:
             raise WebSocketTransportError(
@@ -389,12 +409,49 @@ class WebSocketTransportClient:
             self._connected = False
             raise WebSocketTransportError(f"Failed to receive message: {e}") from e
 
+    def _start_heartbeat(self) -> None:
+        """Start (or restart) the client-side ping heartbeat task."""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            return
+        if self._heartbeat_interval <= 0:
+            return
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+    async def _heartbeat_loop(self) -> None:
+        """Periodically ping the server to keep the connection alive.
+
+        Detects half-open peers: if a ping fails the connection is marked
+        lost so the reconnect loop in _listen_and_reconnect can take over.
+        """
+        try:
+            while self._connected and not self._closing and self._ws is not None:
+                await asyncio.sleep(self._heartbeat_interval)
+                if not self._connected or self._closing or self._ws is None:
+                    return
+                try:
+                    await self._ws.ping()
+                except Exception as e:
+                    logger.warning("heartbeat ping failed: %s", e)
+                    self._connected = False
+                    return
+        except asyncio.CancelledError:
+            return
+
     async def close(self) -> None:
         """Close the WebSocket connection and stop any background listener.
         关闭 WebSocket 连接并停止任何后台监听器
         """
         self._closing = True
         self._connected = False
+
+        # Cancel heartbeat task / 取消心跳任务
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
 
         # Cancel background listener / 取消后台监听器
         if self._listener_task and not self._listener_task.done():
