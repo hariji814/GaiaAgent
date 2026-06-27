@@ -11,18 +11,20 @@
 
 <p align="center">
   <a href="https://github.com/gaiaagent/gaiaagent/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/gaiaagent/gaiaagent/ci.yml?style=flat-square&label=CI" alt="CI" /></a>
-  <a href="https://pypi.org/project/gaiaagent/"><img src="https://img.shields.io/pypi/v/gaiaagent?style=flat-square&color=blue" alt="PyPI" /></a>
-  <a href="https://pypi.org/project/gaiaagent/"><img src="https://img.shields.io/pypi/pyversions/gaiaagent?style=flat-square&color=blue" alt="Python" /></a>
+  <img src="https://img.shields.io/badge/PyPI-not%20yet%20published-orange?style=flat-square" alt="PyPI: not yet published" />
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square" alt="Python 3.10+" />
   <a href="https://github.com/gaiaagent/gaiaagent/blob/main/LICENSE"><img src="https://img.shields.io/github/license/gaiaagent/gaiaagent?style=flat-square&color=blue" alt="License" /></a>
   <a href="https://github.com/gaiaagent/gaiaagent/stargazers"><img src="https://img.shields.io/github/stars/gaiaagent/gaiaagent?style=flat-square" alt="Stars" /></a>
-  <a href="https://discord.gg/gaiaagent"><img src="https://img.shields.io/badge/Discord-join-7289DA?style=flat-square&logo=discord" alt="Discord" /></a>
+  <img src="https://img.shields.io/badge/Discord-planned-7289DA?style=flat-square&logo=discord" alt="Discord: planned" />
 </p>
 
 <p align="center">
-  <em>Status: <strong>Alpha (v0.1.0)</strong> — spec frozen, reference implementation shipping, API may still move. Not production-hardened yet.</em>
+  <em>Status: <strong>Alpha (v0.1.1)</strong> — spec frozen, reference implementation shipping, API may still move. Not production-hardened yet.</em>
 </p>
 
 > 🌐 [中文版](README.zh.md)
+
+> **One-line status:** real, tested (510 passing), runs end-to-end over real HTTP (see `examples/e2e_cross_process.py`), but **alpha and single-implementation**. Not on PyPI yet (install via `pip install -e .`); zero production adopters; the bundled `demo` uses stub LLM responses (no API key) to show protocol flow, not real model inference. Treat it as a reference implementation to evaluate and pilot, not a drop-in production runtime.
 
 ---
 
@@ -173,6 +175,21 @@ This spins up 3 demo agents (Researcher, Analyst, Writer) in a PromptChain
 workflow, routes messages across MCP -> A2A -> ACP protocol boundaries,
 opens a live health dashboard in your browser, and requires zero
 configuration or API keys. It is the fastest way to see what AURC does.
+
+### Real Cross-Protocol Interop (No Stubs on the Wire)
+
+```bash
+python examples/e2e_cross_process.py        # AURC over real HTTP + A2A bridge
+python examples/e2e_mcp_a2a_interop.py      # real A2A client -> AURC -> real MCP server
+```
+
+The second demo is the no-fabrication proof: a spec-compliant A2A `tasks/send`
+client reaches an AURC node over HTTP; AURC translates the task to a skill
+call; that skill invokes a **real MCP server** (official Anthropic `mcp` SDK —
+FastMCP server + `ClientSession` over stdio) and returns the result as an A2A
+task-completed response. Both protocol ends are genuine third-party
+implementations; AURC only translates and routes, and the correlation id is
+carried end-to-end.
 
 ### Define an Agent in 30 Seconds
 
@@ -560,17 +577,17 @@ docker run -p 8080:8080 gaiaagent
 
 ## Roadmap
 
-> GaiaAgent is **v0.1.0 alpha**: the spec is frozen and the reference implementation ships the layers below, but APIs are still settling and production hardening is ongoing. The full, living plan lives in **[ROADMAP.md](ROADMAP.md)** — north star, six workstreams, version milestones, acceptance criteria, and explicit non-goals.
+> GaiaAgent is **v0.1.1 alpha**: the spec is frozen and the reference implementation ships the layers below, but APIs are still settling and production hardening is ongoing. The full, living plan lives in **[ROADMAP.md](ROADMAP.md)** — north star, six workstreams, version milestones, acceptance criteria, and explicit non-goals.
 
 | Version | Theme | Status |
 |:---:|:---|:---:|
 | **v0.1** | Single-process reference impl (3 bridges · 9-state lifecycle · CapABAC · 5 patterns · CLI · Claude) | ✅ Alpha |
-| **v0.2** | Production-ready single-tenant (gRPC · distributed registry · OpenTelemetry · persistent audit) | 🚧 Next |
+| **v0.2** | Production hardening (single-tenant target) (gRPC · distributed registry · OpenTelemetry · persistent audit) | 🚧 Next |
 | **v0.3** | Multi-tenant & federation | 🔜 |
 | **v0.4** | Polyglot SDKs (TypeScript · Go · Rust) + conformance suite | 🔜 |
 | **v1.0** | Standard-grade: second independent implementation · spec frozen · security audit | 🔜 |
 
-**What "alpha" means here:** the modules exist, are unit-tested (352 passing), and run end-to-end in `python main.py` — but edge cases, perf, and the *second independent implementation* (the bar to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec, [ROADMAP.md](ROADMAP.md) for what's next.
+**What "alpha" means here:** the modules exist, are unit-tested (510 passing), and run end-to-end over real HTTP — `python examples/e2e_cross_process.py` (A2A inbound + bridged round-trip) and `python examples/e2e_mcp_a2a_interop.py` (a request crossing MCP → AURC → A2A → AURC → MCP, correlation end-to-end) — but edge cases, perf, and the *second independent implementation* (the bar to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec, [ROADMAP.md](ROADMAP.md) for what's next.
 
 > 📌 **Highest-leverage contribution:** build the second independent implementation of AURC — that single act graduates the protocol from "our spec" to "a standard."
 
@@ -663,8 +680,7 @@ pytest  # verify everything works
 </p>
 
 <p align="center">
-  <a href="https://github.com/gaiaagent/gaiaagent">GitHub</a> ·
-  <a href="https://gaiaagent.dev/docs">Documentation</a> ·
-  <a href="https://discord.gg/gaiaagent">Discord</a> ·
-  <a href="https://pypi.org/project/gaiaagent/">PyPI</a>
+  <a href="https://github.com/gaiaagent/gaiaagent">GitHub</a> |
+  <a href="https://github.com/gaiaagent/gaiaagent#documentation">Documentation</a> |
+  <a href="https://github.com/gaiaagent/gaiaagent/discussions">Discussions</a>
 </p>

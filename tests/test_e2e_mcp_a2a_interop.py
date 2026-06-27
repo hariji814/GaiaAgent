@@ -1,0 +1,49 @@
+"""Regression test for the REAL MCP <-> A2A cross-process interop demo.
+
+Locks in the no-fabrication sellability proof: a spec-compliant A2A client
+sends a real tasks/send over HTTP to an AURC node; AURC translates it to an
+AURC skill call; that skill invokes a REAL MCP server (official FastMCP +
+official MCP ClientSession over stdio) and returns the result as an A2A
+task-completed response -- with the JSON-RPC id (correlation) carried
+end-to-end. If this breaks, the "AURC bridges real MCP and real A2A" claim
+breaks.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+EXAMPLE = Path(__file__).resolve().parent.parent / "examples" / "e2e_mcp_a2a_interop.py"
+
+
+def test_mcp_a2a_interop_runs_clean() -> None:
+    """Run examples/e2e_mcp_a2a_interop.py and assert it exits 0 + real-chain markers."""
+    completed = subprocess.run(
+        [sys.executable, str(EXAMPLE)],
+        capture_output=True,
+        text=True,
+        timeout=90,
+        env=dict(os.environ),
+    )
+
+    combined = completed.stdout + completed.stderr
+    assert completed.returncode == 0, (
+        f"interop demo exited {completed.returncode}\n--- stdout ---\n{completed.stdout}"
+        f"\n--- stderr ---\n{completed.stderr}"
+    )
+    # Both protocol ends are real: A2A client + real MCP server, bridged by AURC.
+    assert "real A2A client -> AURC -> real MCP, correlation e2e" in combined, combined
+    assert "a real A2A client reached a real MCP server through AURC" in combined, combined
+    # The arithmetic was computed inside the real MCP server, not by AURC.
+    assert "real-mcp" in combined, combined
+    assert "mcp_content" in combined, combined
+    assert "42" in combined, combined
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
