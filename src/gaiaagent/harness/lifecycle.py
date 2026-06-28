@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from datetime import datetime, timezone
 from typing import Any
 
@@ -249,6 +249,10 @@ class RuntimeHarness:
         self._recovery_policy = recovery_policy or RecoveryPolicy()
         self._resource_limits = resource_limits or ResourceLimits()
         self._running = False
+        # Tracked fire-and-forget tasks for async state listeners. Held until
+        # completion so the GC cannot cancel them mid-flight (the asyncio
+        # required pattern); auto-discarded via a done callback.
+        self._pending_listener_tasks: set[asyncio.Task[Any]] = set()
 
     # =========================================================================
     # Registration / 注册
@@ -572,7 +576,7 @@ class RuntimeHarness:
 
         Unlike _notify_listeners (which is async and awaits each listener),
         this method is synchronous and returns immediately.  Async listeners
-        are scheduled as tasks on the running event loop (if any); sync
+        are scheduled as tracked tasks on the running event loop (if any); sync
         listeners are called inline.  This makes it safe to call from
         AgentInstance._apply_transition without deadlocking.
         """
@@ -580,12 +584,40 @@ class RuntimeHarness:
             try:
                 result = listener(agent_id, old_state, new_state)
                 if asyncio.iscoroutine(result):
-                    loop = asyncio.get_event_loop()
-                    loop.create_task(result)
+                    self._schedule_listener_task(result)
             except Exception:
                 logger.exception(
                     "Error in state listener for agent '%s'", agent_id
                 )
+
+    def _schedule_listener_task(self, coro: Coroutine[Any, Any, Any]) -> None:
+        """Schedule an async state-listener as a tracked fire-and-forget task.
+
+        Uses the running loop (not the deprecated ``asyncio.get_event_loop``).
+        The task is held in ``_pending_listener_tasks`` until completion so the
+        garbage collector cannot collect it mid-flight -- the fire-and-forget
+        pattern asyncio requires. When no loop is running (a sync caller
+        outside any async context) the coroutine is closed to avoid a
+        'coroutine was never awaited' warning.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.debug("No running event loop; closing un-scheduled state listener")
+            coro.close()
+            return
+        task = loop.create_task(coro)
+        self._pending_listener_tasks.add(task)
+        task.add_done_callback(self._discard_listener_task)
+
+    def _discard_listener_task(self, task: asyncio.Task[Any]) -> None:
+        """Done callback: drop the task reference and surface any exception."""
+        self._pending_listener_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("Error in async state listener", exc_info=exc)
 
     async def _notify_listeners(
         self, agent_id: str, old_state: AgentState, new_state: AgentState

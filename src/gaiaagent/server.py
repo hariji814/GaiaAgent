@@ -132,16 +132,17 @@ class AURCServer:
         try:
             msg = AURCMessage.model_validate(request_data)
         except Exception as exc:
-            return {"error": {"code": "bad_message", "message": str(exc)}}
+            logger.warning("Malformed AURC message rejected: %s", exc)
+            return {"error": {"code": "bad_message", "message": "Malformed message"}}
 
         try:
             outcome = await self.router.route(msg)
         except AuthzDeniedError as exc:
             logger.info("Authorization denied for %s: %s", msg.message_id, exc.reason)
             return {"error": {"code": "forbidden", "message": exc.reason, "recoverable": False}}
-        except Exception as exc:
+        except Exception:
             logger.exception("route failed for %s", msg.message_id)
-            return {"error": {"code": "route_error", "message": str(exc)}}
+            return {"error": {"code": "route_error", "message": "Internal error"}}
 
         # Handlers return either a dict (already JSON-friendly) or an AURCMessage
         # (e.g. when routed to a BridgeConnector). Normalize both.

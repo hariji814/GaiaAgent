@@ -81,7 +81,10 @@ async def test_extra_route_error_returns_500(server: _ServerHarness) -> None:
     async with server.client() as client:
         resp = await client.post("/boom", json={})
     assert resp.status_code == 500
-    assert "boom" in resp.json()["error"]
+    # Ingress hardening (TODO P1-2): errors exit via a structured envelope that
+    # never echoes raw exception text to the wire.
+    assert resp.json()["error"]["code"] == "internal_error"
+    assert "boom" not in resp.text
 
 
 async def test_health_endpoint(server: _ServerHarness) -> None:

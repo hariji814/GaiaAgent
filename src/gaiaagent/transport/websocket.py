@@ -26,6 +26,16 @@ class WebSocketTransportError(Exception):
     pass
 
 
+def _ws_error_envelope(code: str, message: str) -> str:
+    """Build a structured JSON error string for the wire.
+
+    Mirrors the HTTP transport's error shape so clients branch on a stable
+    {error: {code, message}} envelope across both transports. Raw exception
+    text is kept out of the response.
+    """
+    return json.dumps({"error": {"code": code, "message": message}})
+
+
 # =============================================================================
 # Server / 服务器
 # =============================================================================
@@ -54,11 +64,13 @@ class WebSocketTransportServer:
         port: int = 8765,
         ping_interval: float = 20.0,
         ping_timeout: float = 10.0,
+        max_frame_bytes: int = 10 * 1024 * 1024,
     ) -> None:
         self._host = host
         self._port = port
         self._ping_interval = ping_interval
         self._ping_timeout = ping_timeout
+        self._max_frame_bytes = max_frame_bytes
         self._handler: WebSocketMessageHandler | None = None
         self._server: Any = None  # websockets.Server instance / websockets 服务器实例
         self._running = False
@@ -104,8 +116,9 @@ class WebSocketTransportServer:
                 handler,
                 self._host,
                 self._port,
-                # Allow large messages / 允许大消息
-                max_size=10 * 1024 * 1024,  # 10 MB
+                # Inbound frame cap: oversized messages are rejected by the
+                # websockets library before they reach the handler. / 入口帧上限
+                max_size=self._max_frame_bytes,
                 # Heartbeat: server pings idle clients every ping_interval
                 # and drops them if no pong within ping_timeout. This detects
                 # half-open connections (NAT timeout, dead peers) proactively.
@@ -201,10 +214,11 @@ class WebSocketTransportServer:
                             "Invalid JSON from %s: %s / 来自 %s 的无效 JSON: %s",
                             remote, e, remote, e,
                         )
-                        error_response = json.dumps({
-                            "error": f"Invalid JSON: {e}",
-                        })
-                        await websocket.send(error_response)
+                        # Structured error envelope; raw parse error stays in the log.
+                        # / 结构化错误信封，原始解析错误仅留日志
+                        await websocket.send(
+                            _ws_error_envelope("bad_message", "Malformed message")
+                        )
                         continue
 
                     # Route to handler / 路由到处理函数
@@ -220,11 +234,11 @@ class WebSocketTransportServer:
                                 "Handler error for %s: %s / 处理 %s 时出错: %s",
                                 remote, e, remote, e,
                             )
-                            error_response = json.dumps({
-                                "error": str(e),
-                                "type": type(e).__name__,
-                            })
-                            await websocket.send(error_response)
+                            # Internal exception text never goes on the wire.
+                            # / 内部异常文本不上线路
+                            await websocket.send(
+                                _ws_error_envelope("internal_error", "Internal error")
+                            )
                     else:
                         # No handler configured / 未配置处理函数
                         logger.warning(
@@ -299,6 +313,7 @@ class WebSocketTransportClient:
         reconnect: bool = True,
         max_reconnect_delay: float = _DEFAULT_MAX_RECONNECT_DELAY,
         heartbeat_interval: float = 20.0,
+        max_frame_bytes: int = 10 * 1024 * 1024,
     ) -> None:
         """Initialize the WebSocket client. 初始化 WebSocket 客户端
 
@@ -310,12 +325,14 @@ class WebSocketTransportClient:
             heartbeat_interval: Seconds between client-initiated pings
                 (keeps NAT/firewall mappings alive and detects dead peers).
                 客户端 ping 间隔秒数（保活 NAT/防火墙映射并检测死亡对端）。
+            max_frame_bytes: Max inbound message size in bytes / 入口最大帧字节数
         """
         self._url = url
         self._timeout = timeout
         self._reconnect_enabled = reconnect
         self._max_reconnect_delay = max_reconnect_delay
         self._heartbeat_interval = heartbeat_interval
+        self._max_frame_bytes = max_frame_bytes
         self._ws: Any = None  # websockets.ClientConnection / websockets 客户端连接
         self._connected = False
         self._listener_task: asyncio.Task[None] | None = None
@@ -344,7 +361,7 @@ class WebSocketTransportClient:
             self._ws = await asyncio.wait_for(
                 ws_connect(
                     self._url,
-                    max_size=10 * 1024 * 1024,  # 10 MB
+                    max_size=self._max_frame_bytes,
                 ),
                 timeout=self._timeout,
             )

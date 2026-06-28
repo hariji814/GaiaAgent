@@ -24,6 +24,65 @@ class HTTPTransportError(Exception):
     pass
 
 
+class IngressLimits:
+    """Bounded ingress policy for the HTTP server. HTTP 入口限制策略
+
+    Caps the resources a single inbound request may consume so a hostile or
+    buggy peer cannot exhaust the node by sending oversized bodies, opening
+    many connections, or flooding requests. Defaults are conservative; tune
+    per deployment.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_body_bytes: int = 1 * 1024 * 1024,
+        max_connections: int | None = 1024,
+        request_timeout: float = 30.0,
+        rate_limit: float | None = 100.0,
+        rate_burst: float = 200.0,
+    ) -> None:
+        # 1 MiB default: an AURC message carries params, not payloads.
+        self.max_body_bytes = max_body_bytes
+        # Passed to uvicorn as limit_concurrency (simultaneous connections).
+        self.max_connections = max_connections
+        # Whole-request wall clock, enforced via asyncio.wait_for on the handler.
+        self.request_timeout = request_timeout
+        # Global token-bucket ingress limiter. None disables rate limiting.
+        self.rate_limit = rate_limit
+        self.rate_burst = rate_burst
+
+
+class TokenBucketLimiter:
+    """Global async token-bucket rate limiter. 全局令牌桶限流器
+
+    Refills ``rate`` tokens per second up to ``burst`` capacity. acquire()
+    returns True when a token is available (consumes one), False when the
+    bucket is empty. Intended for the ASGI ingress hot path where every
+    request acquires before dispatch.
+    """
+
+    def __init__(self, rate: float, burst: float) -> None:
+        self._rate = rate
+        self._capacity = burst
+        self._tokens = float(burst)
+        self._lock = asyncio.Lock()
+        self._last = 0.0
+
+    async def acquire(self) -> bool:
+        async with self._lock:
+            now = asyncio.get_running_loop().time()
+            if self._last == 0.0:
+                self._last = now
+            elapsed = now - self._last
+            self._last = now
+            self._tokens = min(self._capacity, self._tokens + elapsed * self._rate)
+            if self._tokens >= 1.0:
+                self._tokens -= 1.0
+                return True
+            return False
+
+
 class HTTPTransportServer:
     """HTTP server for receiving AURC messages.
     接收 AURC 消息的 HTTP 服务器
@@ -49,6 +108,29 @@ class HTTPTransportServer:
         self._running = False
         # Extra POST routes: path -> handler (for bridge endpoints, etc.)
         self._routes: dict[str, HTTPMessageHandler] = {}
+        # Ingress hardening (TODO P1-2): body cap, connection cap, request
+        # timeout, and a global token-bucket rate limiter.
+        self._ingress = IngressLimits()
+        self._limiter: TokenBucketLimiter | None = (
+            TokenBucketLimiter(self._ingress.rate_limit, self._ingress.rate_burst)
+            if self._ingress.rate_limit is not None
+            else None
+        )
+
+    @property
+    def ingress_limits(self) -> IngressLimits:
+        """The active ingress policy (read-only view). 当前入口策略"""
+        return self._ingress
+
+    def set_ingress_limits(self, limits: IngressLimits) -> None:
+        """Replace the ingress policy. Must be called before start().
+        替换入口策略，须在 start() 前调用。"""
+        self._ingress = limits
+        self._limiter = (
+            TokenBucketLimiter(limits.rate_limit, limits.rate_burst)
+            if limits.rate_limit is not None
+            else None
+        )
 
     def set_handler(self, handler: HTTPMessageHandler) -> None:
         """Set the message handler. 设置消息处理函数"""
@@ -77,7 +159,13 @@ class HTTPTransportServer:
 
             # Create ASGI app / 创建 ASGI 应用
             app = self._create_app()
-            config = Config(app=app, host=self._host, port=self._port, log_level="info")
+            config = Config(
+                app=app,
+                host=self._host,
+                port=self._port,
+                log_level="info",
+                limit_concurrency=self._ingress.max_connections,
+            )
             self._server = Server(config)
             self._running = True
             logger.info("HTTP transport server starting on %s:%d", self._host, self._port)
@@ -169,6 +257,10 @@ class HTTPTransportServer:
 
             method = scope.get("method", "")
             path = scope.get("path", "")
+            limiter = self._limiter
+            if limiter is not None and not await limiter.acquire():
+                await _send_error(send, 429, "rate_limited", "Too many requests")
+                return
 
             # Route dashboard requests to the DashboardAPI ASGI app
             # / 将仪表盘请求路由到 DashboardAPI
@@ -191,15 +283,15 @@ class HTTPTransportServer:
             # Extra registered routes (bridge endpoints, etc.)
             if method == "POST" and path in self._routes:
                 route_handler = self._routes[path]
-                body = b""
-                while True:
-                    message = await receive()
-                    body += message.get("body", b"")
-                    if not message.get("more_body", False):
-                        break
+                body = await _read_bounded(receive, self._ingress.max_body_bytes, send)
+                if body is None:
+                    return  # oversized -> already responded
                 try:
                     request_data = json.loads(body)
-                    response_data = await route_handler(request_data)
+                    response_data = await asyncio.wait_for(
+                        route_handler(request_data),
+                        timeout=self._ingress.request_timeout,
+                    )
                     response_body = json.dumps(response_data, default=str).encode()
                     await send({
                         "type": "http.response.start",
@@ -210,30 +302,25 @@ class HTTPTransportServer:
                         ],
                     })
                     await send({"type": "http.response.body", "body": response_body})
-                except Exception as e:
-                    error_body = json.dumps({"error": str(e)}).encode()
-                    await send({
-                        "type": "http.response.start",
-                        "status": 500,
-                        "headers": [[b"content-type", b"application/json"]],
-                    })
-                    await send({"type": "http.response.body", "body": error_body})
+                except Exception:
+                    logger.exception("Ingress route handler error on %s", path)
+                    await _send_error(send, 500, "internal_error", "Internal error")
                 return
 
             # Only handle POST /aurc / 只处理 POST /aurc
             if method == "POST" and path in ("/aurc", "/aurc/"):
                 # Read request body / 读取请求体
-                body = b""
-                while True:
-                    message = await receive()
-                    body += message.get("body", b"")
-                    if not message.get("more_body", False):
-                        break
+                body = await _read_bounded(receive, self._ingress.max_body_bytes, send)
+                if body is None:
+                    return  # oversized -> already responded
 
                 try:
                     request_data = json.loads(body)
                     if handler:
-                        response_data = await handler(request_data)
+                        response_data = await asyncio.wait_for(
+                            handler(request_data),
+                            timeout=self._ingress.request_timeout,
+                        )
                     else:
                         response_data = {"error": "No handler configured"}
 
@@ -250,17 +337,10 @@ class HTTPTransportServer:
                         "type": "http.response.body",
                         "body": response_body,
                     })
-                except Exception as e:
-                    error_body = json.dumps({"error": str(e)}).encode()
-                    await send({
-                        "type": "http.response.start",
-                        "status": 500,
-                        "headers": [[b"content-type", b"application/json"]],
-                    })
-                    await send({
-                        "type": "http.response.body",
-                        "body": error_body,
-                    })
+                except Exception:
+                    logger.exception("Ingress handler error on /aurc")
+                    await _send_error(send, 500, "internal_error", "Internal error")
+                return
 
             elif method == "GET" and path in ("/health", "/health/"):
                 health = json.dumps({"status": "ok", "protocol": "aurc/0.1"}).encode()
@@ -286,6 +366,45 @@ class HTTPTransportServer:
                 })
 
         return app
+
+
+async def _read_bounded(
+    receive: Any, max_bytes: int, send: Any
+) -> bytes | None:
+    """Read the ASGI request body, capped at ``max_bytes``.
+
+    Returns the body, or None when the body exceeds the cap (in which case a
+    413 envelope has already been sent and the caller must return).
+    """
+    body = b""
+    while True:
+        message = await receive()
+        chunk: bytes = message.get("body", b"")
+        body += chunk
+        if max_bytes > 0 and len(body) > max_bytes:
+            await _send_error(send, 413, "payload_too_large", "Request body too large")
+            return None
+        if not message.get("more_body", False):
+            break
+    return body
+
+
+async def _send_error(
+    send: Any, status: int, code: str, message: str
+) -> None:
+    """Send a structured JSON error envelope, never leaking raw exceptions.
+
+    Single error-exit for the transport layer: {code, message} with a stable
+    shape that callers can branch on. Internal exception text stays in the
+    server log, not on the wire.
+    """
+    body = json.dumps({"error": {"code": code, "message": message}}).encode()
+    await send({
+        "type": "http.response.start",
+        "status": status,
+        "headers": [[b"content-type", b"application/json"]],
+    })
+    await send({"type": "http.response.body", "body": body})
 
 
 class HTTPTransportClient:

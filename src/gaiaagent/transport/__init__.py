@@ -6,6 +6,8 @@ from gaiaagent.transport.http import (
     HTTPTransportClient,
     HTTPTransportError,
     HTTPTransportServer,
+    IngressLimits,
+    TokenBucketLimiter,
 )
 from gaiaagent.transport.websocket import (
     WebSocketTransportClient,
@@ -14,6 +16,8 @@ from gaiaagent.transport.websocket import (
 )
 
 __all__ = [
+    "IngressLimits",
+    "TokenBucketLimiter",
     "HTTPTransportClient",
     "HTTPTransportError",
     "HTTPTransportServer",
