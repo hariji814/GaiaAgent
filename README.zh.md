@@ -24,7 +24,7 @@
 
 > 🌐 [English](README.md)
 
-> **一句话现状：** 真实可用、已测试（522 passing），经真实 HTTP 端到端运行（见 `examples/e2e_cross_process.py`），但**仍为 Alpha 且仅单一实现**。尚未发布到 PyPI（用 `pip install -e .` 安装）；零生产采用方；内置 `demo` 使用 stub LLM 响应（无需 API key）以展示协议流而非真实模型推理。请将其作为评估与试点的参考实现，而非可直接上线的生产运行时。
+> **一句话现状：** 真实可用、已测试（523 passing），经真实 HTTP 端到端运行（见 `examples/e2e_cross_process.py`），但**仍为 Alpha 且仅单一实现**。尚未发布到 PyPI（用 `pip install -e .` 安装）；零生产采用方；内置 `demo` 使用 stub LLM 响应（无需 API key）以展示协议流而非真实模型推理。请将其作为评估与试点的参考实现，而非可直接上线的生产运行时。
 
 ---
 
