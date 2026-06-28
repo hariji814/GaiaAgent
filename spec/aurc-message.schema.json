@@ -1,0 +1,476 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gaiaagent.dev/spec/aurc-message.schema.json",
+  "title": "AURCMessage",
+  "description": "Frozen AURC v0.1 wire-format contract. Generated from gaiaagent.core.message.AURCMessage. Polyglot SDKs (TS/Go/Rust) and the AURC conformance suite validate messages against this artifact.",
+  "$defs": {
+    "BridgeContext": {
+      "description": "Protocol bridge context — tracks which protocols a message has passed through.\n协议桥接上下文 — 追踪消息经过了哪些协议转换\n\nThis enables:\n1. Understanding where a message originated (even across protocol boundaries)\n2. Debugging multi-protocol chains\n3. Applying protocol-specific security rules",
+      "properties": {
+        "origin_protocol": {
+          "default": "aurc",
+          "description": "Protocol where this message originated / 消息源协议",
+          "title": "Origin Protocol",
+          "type": "string"
+        },
+        "bridged_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Previous protocol if bridged / 如果经过桥接，上一个协议",
+          "title": "Bridged From"
+        },
+        "bridge_chain": {
+          "description": "Chain of bridges, e.g. ['a2a→aurc', 'aurc→mcp'] / 桥接链",
+          "items": {
+            "type": "string"
+          },
+          "title": "Bridge Chain",
+          "type": "array"
+        }
+      },
+      "title": "BridgeContext",
+      "type": "object"
+    },
+    "DelegationHop": {
+      "description": "Single hop in a delegation chain. 委托链中的单跳\n\nRecords: who delegated to whom, with what scopes, when.\nThis is the key mechanism for solving MCP's Confused Deputy problem.",
+      "properties": {
+        "from_agent": {
+          "description": "Delegating agent's AURC ID / 委托方 AURC ID",
+          "title": "From Agent",
+          "type": "string"
+        },
+        "to_agent": {
+          "description": "Receiving agent's AURC ID / 被委托方 AURC ID",
+          "title": "To Agent",
+          "type": "string"
+        },
+        "scopes": {
+          "description": "Permission scopes granted in this delegation / 此次委托授予的权限范围",
+          "items": {
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        },
+        "timestamp": {
+          "description": "When this delegation was made / 委托时间",
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "signature": {
+          "default": "",
+          "description": "Ed25519 signature (base64); empty if unsigned / 本跳签名，未签名则空",
+          "title": "Signature",
+          "type": "string"
+        },
+        "signing_key_id": {
+          "default": "",
+          "description": "Identifier of the signing key / 签名密钥标识",
+          "title": "Signing Key Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_agent",
+        "to_agent"
+      ],
+      "title": "DelegationHop",
+      "type": "object"
+    },
+    "ErrorInfo": {
+      "description": "Structured error information. 结构化错误信息",
+      "properties": {
+        "code": {
+          "description": "Error code, e.g. 'tool_not_found'",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "description": "Human-readable error message / 人类可读错误消息",
+          "title": "Message",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "description": "Error details / 错误详情",
+          "title": "Details",
+          "type": "object"
+        },
+        "recoverable": {
+          "default": true,
+          "description": "Whether the error is recoverable / 是否可恢复",
+          "title": "Recoverable",
+          "type": "boolean"
+        },
+        "suggested_recovery": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Suggested recovery action / 建议的恢复动作",
+          "title": "Suggested Recovery"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorInfo",
+      "type": "object"
+    },
+    "MessageBody": {
+      "description": "The payload of an AURC message. AURC 消息载荷\n\nThe structure varies by message type:\n- request: { method, skill, params, capabilities_required }\n- response: { result, error, metadata }\n- notification: { event, data }\n- stream: { chunk_index, total_chunks, data, is_final }\n- delegation: { task_id, skill, context, lifecycle }",
+      "properties": {
+        "method": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Method name: 'invoke', 'query', etc.",
+          "title": "Method"
+        },
+        "skill": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target skill ID / 目标技能 ID",
+          "title": "Skill"
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "Method parameters / 方法参数",
+          "title": "Params",
+          "type": "object"
+        },
+        "result": {
+          "default": null,
+          "description": "Result data / 结果数据",
+          "title": "Result"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Error details if failed / 错误详情"
+        },
+        "event": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Event type / 事件类型",
+          "title": "Event"
+        },
+        "chunk_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Current chunk index / 当前块索引",
+          "title": "Chunk Index"
+        },
+        "total_chunks": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total number of chunks / 总块数",
+          "title": "Total Chunks"
+        },
+        "data": {
+          "default": null,
+          "description": "Chunk data / 块数据",
+          "title": "Data"
+        },
+        "is_final": {
+          "default": false,
+          "description": "Whether this is the final chunk / 是否为最后一块",
+          "title": "Is Final",
+          "type": "boolean"
+        },
+        "capabilities_required": {
+          "description": "External capabilities needed / 需要的外部能力",
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities Required",
+          "type": "array"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "title": "MessageBody",
+      "type": "object"
+    },
+    "MessageDirection": {
+      "description": "Direction of message flow. 消息流向",
+      "enum": [
+        "request",
+        "response",
+        "notification",
+        "stream",
+        "delegation",
+        "handoff",
+        "heartbeat"
+      ],
+      "title": "MessageDirection",
+      "type": "string"
+    },
+    "MessageSecurity": {
+      "description": "Security context attached to a message. 消息安全上下文\n\nCarries authentication and authorization information needed for\nprotocol-level permission enforcement (solving MCP's confused deputy).",
+      "properties": {
+        "auth_token_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reference to auth token (not the token itself) / 认证令牌引用",
+          "title": "Auth Token Ref"
+        },
+        "scopes": {
+          "description": "Effective permission scopes for this message / 此消息的有效权限范围",
+          "items": {
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        },
+        "delegation_chain": {
+          "description": "Full delegation chain from original requester / 从原始请求者开始的完整委托链",
+          "items": {
+            "$ref": "#/$defs/DelegationHop"
+          },
+          "title": "Delegation Chain",
+          "type": "array"
+        }
+      },
+      "title": "MessageSecurity",
+      "type": "object"
+    },
+    "Priority": {
+      "description": "Message/task priority levels. 优先级",
+      "enum": [
+        "low",
+        "normal",
+        "high",
+        "critical"
+      ],
+      "title": "Priority",
+      "type": "string"
+    },
+    "RoutingInfo": {
+      "description": "Message routing metadata. 消息路由元数据",
+      "properties": {
+        "ttl_hops": {
+          "default": 5,
+          "description": "Maximum hops before message expires / 消息最大跳数",
+          "title": "Ttl Hops",
+          "type": "integer"
+        },
+        "priority": {
+          "$ref": "#/$defs/Priority",
+          "default": "normal",
+          "description": "Message priority / 消息优先级"
+        },
+        "timeout_ms": {
+          "default": 30000,
+          "description": "Response timeout in ms / 响应超时毫秒",
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "reply_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where to send the response / 响应发送目标",
+          "title": "Reply To"
+        }
+      },
+      "title": "RoutingInfo",
+      "type": "object"
+    },
+    "SessionInfo": {
+      "description": "Session and conversation tracking. 会话追踪\n\nEnables:\n1. Multi-turn conversations between agents\n2. Correlating related messages\n3. Context window management",
+      "properties": {
+        "session_id": {
+          "description": "Unique session identifier / 会话唯一标识",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "conversation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Conversation ID for multi-turn grouping / 多轮对话分组 ID",
+          "title": "Conversation Id"
+        },
+        "turn": {
+          "default": 0,
+          "description": "Turn number in conversation / 对话轮次",
+          "title": "Turn",
+          "type": "integer"
+        },
+        "parent_message_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ID of the message this is responding to / 响应来源消息 ID",
+          "title": "Parent Message Id"
+        }
+      },
+      "title": "SessionInfo",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "aurc_version": {
+      "default": "0.1",
+      "description": "AURC protocol version / AURC 协议版本",
+      "title": "Aurc Version",
+      "type": "string"
+    },
+    "message_id": {
+      "description": "Unique message identifier / 消息唯一标识",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Groups related messages across protocol boundaries / 跨协议关联相关消息",
+      "title": "Correlation Id"
+    },
+    "trace_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Distributed tracing ID / 分布式追踪 ID",
+      "title": "Trace Id"
+    },
+    "timestamp": {
+      "description": "Message creation time (UTC) / 消息创建时间 (UTC)",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "source": {
+      "description": "Source agent AURC ID / 源 Agent AURC ID",
+      "title": "Source",
+      "type": "string"
+    },
+    "target": {
+      "description": "Target agent AURC ID / 目标 Agent AURC ID",
+      "title": "Target",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/MessageDirection",
+      "description": "Message type / 消息类型"
+    },
+    "body": {
+      "$ref": "#/$defs/MessageBody"
+    },
+    "protocol_context": {
+      "$ref": "#/$defs/BridgeContext"
+    },
+    "session": {
+      "$ref": "#/$defs/SessionInfo"
+    },
+    "routing": {
+      "$ref": "#/$defs/RoutingInfo"
+    },
+    "security": {
+      "$ref": "#/$defs/MessageSecurity"
+    }
+  },
+  "required": [
+    "source",
+    "target",
+    "type"
+  ],
+  "type": "object"
+}

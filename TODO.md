@@ -35,5 +35,7 @@
 - [ ] **可插拔存储抽象**（影响：持久化/合规，目标：v0.2）
   - 现状（2026-06-28 复核）：部分完成。`AuditSink` Protocol + `FileAuditSink`（Phase 4.2）、`TraceSink` Protocol + `FileTraceSink` 已落地并测试；死信队列、`SessionStore`、策略与限流窗仍全内存，重启即丢。
   - 动作：补 `DeadLetterStore`/`SessionStore`/`PolicyStore` 接口，先内存后 Redis/对象存储。
-- [ ] **冻结线缆格式 JSON Schema**（影响：生态/polyglot，目标：v0.4）
-  - 动作：发布 `AURCMessage` JSON Schema 作为 TS/Go/Rust SDK 与桥接一致性测试的共同契约。
+- [x] **冻结线缆格式 JSON Schema**（影响：生态/polyglot，目标：v0.4）
+  - 状态（2026-06-28）：已完成。`spec/aurc-message.schema.json` 为从 `AURCMessage` 模型生成的冻结 JSON Schema（2020-12，带 `$id`/`$schema`）；`gaiaagent.conformance.schema.generate_message_schema()` 为唯一真源，`published_schema_matches_model()` 做漂移检测，`scripts/generate_schema.py` / `aurc conformance --schema` 发布或校验；`jsonschema` 列为 `conformance` extra。
+- [x] **AURC 一致性测试集**（影响：标准化/生态，目标：v0.1→v1.0 门槛）
+  - 状态（2026-06-28）：已完成。`gaiaagent.conformance` 包定义「AURC-compatible」：结构层（按冻结 schema 校验原始线缆 JSON）+ 语义层（JSON Schema 无法表达的不变式：correlation 传播、委托链 scope 只收窄、TTL 正、error/result 互斥、流式块索引、响应 source/target 对称）。`run_conformance() -> ConformanceReport` 为第三方可调入口；`aurc conformance <file>` CLI 子命令。全套 553 passed / 2 skipped。

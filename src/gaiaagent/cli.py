@@ -7,6 +7,7 @@ Provides subcommands for:
 - Validating Agent Descriptor JSON files (validate)
 - Testing protocol bridge translations (bridge test)
 - Exporting the local registry to JSON (registry export)
+- Conformance-checking wire messages and publishing the schema (conformance)
 
 Usage / 用法:
     aurc serve --host 0.0.0.0 --port 8080 --dashboard
@@ -233,6 +234,85 @@ def _cmd_info(args: argparse.Namespace) -> int:
             print(f"      {_OK} {proto}")
 
     return 0
+
+
+# =============================================================================
+# Command: conformance / 一致性校验
+# =============================================================================
+
+
+def _cmd_conformance(args: argparse.Namespace) -> int:
+    """Conformance-check wire messages, or publish/check the frozen schema.
+    一致性校验线缆消息,或发布/校验冻结 schema
+
+    Without --schema: read a JSON array or NDJSON file of AURC wire messages
+    and run the conformance suite (structural + semantic).
+    With --schema: regenerate and write the published schema (or, with
+    --check, only verify it is in sync).
+    """
+    quiet = args.quiet
+
+    if args.schema:
+        from gaiaagent.conformance.schema import published_schema_matches_model, write_schema
+
+        if args.check:
+            ok = published_schema_matches_model()
+            if quiet:
+                print(json.dumps({"schema_in_sync": ok}))
+            else:
+                tag = _OK if ok else _FAIL
+                _print(f"{tag} schema {'in sync' if ok else 'STALE'}", quiet)
+            return 0 if ok else 1
+        write_schema()
+        ok = published_schema_matches_model()
+        if quiet:
+            print(json.dumps({"schema_in_sync": ok}))
+        else:
+            _print(f"{_OK} schema published ({'in sync' if ok else 'STALE'})", quiet)
+        return 0 if ok else 1
+
+    if not args.file:
+        _error("Provide a message file, or use --schema / 需提供消息文件或使用 --schema")
+        return 2
+
+    from gaiaagent.conformance import run_conformance
+
+    file_path = Path(args.file)
+    if not file_path.exists():
+        _error(f"File not found: {file_path}  文件不存在")
+        return 1
+
+    raw = file_path.read_text(encoding="utf-8")
+    # Accept a JSON array or NDJSON (one message per line).
+    # 接受 JSON 数组或 NDJSON(每行一条消息)。
+    try:
+        if raw.lstrip().startswith("["):
+            messages = json.loads(raw)
+        else:
+            messages = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    except json.JSONDecodeError as exc:
+        _error(f"Invalid JSON: {exc}  JSON 格式错误")
+        return 1
+
+    report = run_conformance(messages)
+    if quiet:
+        print(json.dumps({"ok": report.ok, "total": report.total,
+                           "passed": report.passed, "failed": report.failed}))
+    else:
+        tag = _OK if report.ok else _FAIL
+        _print(f"{tag} {report.summary()}", quiet)
+        for mr in report.messages:
+            if mr.passed:
+                continue
+            mid = mr.message_id or f"#{mr.index}"
+            _print(f"  {_ARROW} {mid}: FAIL", quiet)
+            for chk in mr.checks:
+                if not chk.passed:
+                    _print(f"      {_ARROW} {chk.name}: {chk.detail}", quiet)
+        for chk in report.cross_message_checks:
+            if not chk.passed:
+                _print(f"  {_ARROW} cross:{chk.name}: {chk.detail}", quiet)
+    return 0 if report.ok else 1
 
 
 # =============================================================================
@@ -743,6 +823,31 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Print protocol and system info / 打印协议和系统信息",
     )
 
+    # --- conformance ---
+    p_conformance = subparsers.add_parser(
+        "conformance",
+        parents=[parent],
+        help="Conformance-check wire messages / publish schema / 一致性校验与发布 schema",
+    )
+    p_conformance.add_argument(
+        "file",
+        nargs="?",
+        help="JSON array or NDJSON of AURC wire messages / AURC 线缆消息(JSON 数组或 NDJSON)",
+    )
+    p_conformance.add_argument(
+        "--schema",
+        action="store_true",
+        help="Publish/check the frozen wire-format schema / 发布或校验冻结 schema",
+    )
+    p_conformance.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "With --schema: exit non-zero if published schema is stale / "
+            "配合 --schema: schema 过期则非零退出"
+        ),
+    )
+
     # --- validate ---
     p_validate = subparsers.add_parser(
         "validate",
@@ -823,6 +928,7 @@ def main() -> None:
         "info": _cmd_info,
         "validate": _cmd_validate,
         "init": _cmd_init,
+        "conformance": _cmd_conformance,
     }
 
     # Handle nested subcommands (bridge test, registry export) / 处理嵌套子命令

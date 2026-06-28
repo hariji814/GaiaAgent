@@ -34,7 +34,7 @@ A protocol becomes a standard when **two independent implementations** agree. Ga
 | **v0.1** | Single-process reference impl | 3 bridges · 9-state lifecycle · CapABAC · 5 workflow patterns · CLI · Claude | ✅ Alpha |
 | **v0.2** | Production-ready single-tenant | gRPC transport · distributed registry · OpenTelemetry · persistent audit | 🚧 Next |
 | **v0.3** | Multi-tenant & federation | Federated discovery · tenant isolation · rate-limit policies · backpressure | 🔜 |
-| **v0.4** | Polyglot SDKs | TypeScript · Go · Rust client SDKs · spec conformance test suite | 🔜 |
+| **v0.4** | Polyglot SDKs | TypeScript · Go · Rust client SDKs · spec conformance test suite (shipped, see track 6) | 🚧 |
 | **v1.0** | Standard-grade | Second independent implementation · spec frozen · backward-compat guarantee · security audit | 🔜 |
 
 > Version dates are deliberately not pinned — we ship when acceptance criteria are met, not when a calendar says so. Track live progress in [Discussions](https://github.com/gaiaagent/gaiaagent/discussions) and [Issues](https://github.com/gaiaagent/gaiaagent/issues).
@@ -118,7 +118,7 @@ Work is organized into six tracks that move in parallel. Each item lists **what*
 |:---:|:---:|---|
 | AURC v0.1 spec (PROTOCOL.md, CC BY-SA 4.0) | ✅ | Frozen reference for implementers |
 | AURC-RFC process | ✅ | Governed protocol evolution |
-| **Conformance test suite** | 🔜 | "AURC-compatible" must mean something |
+| **Conformance test suite** | 🚧 | "AURC-compatible" now has a defined meaning (`gaiaagent.conformance`: structural + semantic layers, `aurc conformance` CLI); third parties can self-prove compliance |
 | **Second independent implementation** | 🔜 | The bar to call AURC a true standard |
 | **W3C-style trace-context interop** | 💡 | Align with broader tracing standards |
 | **Spec v1.0 freeze + compat guarantee** | 🔜 | Stability for production adopters |

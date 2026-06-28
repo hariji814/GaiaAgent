@@ -34,7 +34,7 @@
 | **v0.1** | 单进程参考实现 | 3 个桥接 · 9 态生命周期 · CapABAC · 5 种工作流模式 · CLI · Claude | ✅ Alpha |
 | **v0.2** | 单租户生产可用 | gRPC 传输 · 分布式注册中心 · OpenTelemetry · 持久化审计 | 🚧 下一个 |
 | **v0.3** | 多租户与联邦 | 联邦发现 · 租户隔离 · 限流策略 · 背压 | 🔜 |
-| **v0.4** | 多语言 SDK | TypeScript · Go · Rust 客户端 SDK · 规范一致性测试集 | 🔜 |
+| **v0.4** | 多语言 SDK | TypeScript · Go · Rust 客户端 SDK · 规范一致性测试集（已落地，见赛道 6） | 🚧 |
 | **v1.0** | 标准级 | 第二个独立实现 · 规范冻结 · 向后兼容保证 · 安全审计 | 🔜 |
 
 > 版本日期有意不固定——达到验收标准才发布，而非按日历。进展见 [Discussions](https://github.com/gaiaagent/gaiaagent/discussions) 与 [Issues](https://github.com/gaiaagent/gaiaagent/issues)。
@@ -118,7 +118,7 @@
 |:---:|:---:|---|
 | AURC v0.1 规范（PROTOCOL.md，CC BY-SA 4.0） | ✅ | 面向实现者的冻结参考 |
 | AURC-RFC 流程 | ✅ | 受治理的协议演进 |
-| **一致性测试集** | 🔜 | "AURC-compatible" 必须有明确含义 |
+| **一致性测试集** | 🚧 | "AURC-compatible" 已有定义（`gaiaagent.conformance`：结构+语义双层，`aurc conformance` CLI）；第三方可自证合规 |
 | **第二个独立实现** | 🔜 | 让 AURC 成为真正标准的门槛 |
 | **W3C 风格的 trace-context 互操作** | 💡 | 与更广泛的追踪标准对齐 |
 | **规范 v1.0 冻结 + 兼容保证** | 🔜 | 为生产采用者提供稳定性 |

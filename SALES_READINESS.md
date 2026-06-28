@@ -18,8 +18,9 @@
 | 7 | 真实 MCP server + 真实 A2A 跨进程联调缺证据（见 C4） | 新增 examples/e2e_mcp_a2a_interop.py：spec-compliant A2A tasks/send 客户端 -> AURC /a2a -> 真实 MCP server（官方 mcp SDK FastMCP + ClientSession/stdio），算术在真实 MCP server 内完成、correlation 端到端；配套 examples/_real_mcp_server.py 与回归测试 | pytest 523 passed |
 | 8 | 规范状态中英自相矛盾：PROTOCOL.zh.md 标「草案」、PROTOCOL.md 标「Stable (v0.1 frozen)」；README.zh.md 版本仍 v0.1.0（英文已 v0.1.1）—— item 3 只改了英文，中文漏改 | PROTOCOL 中英状态统一为分层表述「稳定（v0.1 冻结；向后兼容承诺于 v1.0）」；README.zh.md 状态行 + roadmap 段同步为 v0.1.1 | grep：两版 PROTOCOL 均无「草案」、状态行语义一致；两版 README 均为 v0.1.1 |
 | 9 | ACP 侧无等价真网络联调（见 C4） | 新增 examples/e2e_acp_interop.py：spec-compliant ACP invoke 客户端经 HTTP 打到 AURC /acp，AURC 翻译为 skill 调用，skill 用官方 mcp SDK（FastMCP server + ClientSession/stdio）调用真实 MCP server，算术在真实 MCP server 内完成、correlation 端到端；配套回归测试 tests/test_e2e_acp_interop.py | pytest 523 passed |
+| 10 | 「AURC-compatible」无定义、冻结线缆格式缺失（ROADMAP 赛道 6 / TODO P3） | 新增 `gaiaagent.conformance` 包：定义「AURC-compatible」= 结构层（按冻结 schema 校验原始线缆 JSON）+ 语义层（correlation/scope 收窄/TTL/error-result 互斥/流式索引/响应对称等不变式）；发布 `spec/aurc-message.schema.json`（从 `AURCMessage` 生成、漂移检测）；`aurc conformance <file>` 与 `aurc conformance --schema` CLI；30 项一致性测试 | pytest 553 passed |
 
-全量回归：pytest 523 passed / 2 skipped；ruff check 0 错；mypy --strict 0 错（57 源文件）。
+全量回归：pytest 553 passed / 2 skipped；ruff check 0 错；mypy --strict 0 错（61 源文件）。
 
 ---
 

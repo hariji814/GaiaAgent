@@ -34,6 +34,7 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1.0",
     "mypy>=1.0",
+    "jsonschema>=4.18",
 ]
 http = [
     "httpx>=0.24",
@@ -48,8 +49,11 @@ claude = [
 security = [
     "cryptography>=42.0",
 ]
+conformance = [
+    "jsonschema>=4.18",
+]
 all = [
-    "gaiaagent[dev,http,websocket,claude,security]",
+    "gaiaagent[dev,http,websocket,claude,security,conformance]",
 ]
 
 [project.scripts]
