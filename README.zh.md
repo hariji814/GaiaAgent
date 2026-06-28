@@ -19,10 +19,12 @@
 </p>
 
 <p align="center">
-  <em>状态：<strong>Alpha (v0.1.0)</strong> —— 规范已冻结，参考实现正在交付，API 仍可能调整。尚未达到生产级健壮性。</em>
+  <em>状态：<strong>Alpha (v0.1.1)</strong> —— 规范已冻结，参考实现正在交付，API 仍可能调整。尚未达到生产级健壮性。</em>
 </p>
 
 > 🌐 [English](README.md)
+
+> **一句话现状：** 真实可用、已测试（522 passing），经真实 HTTP 端到端运行（见 `examples/e2e_cross_process.py`），但**仍为 Alpha 且仅单一实现**。尚未发布到 PyPI（用 `pip install -e .` 安装）；零生产采用方；内置 `demo` 使用 stub LLM 响应（无需 API key）以展示协议流而非真实模型推理。请将其作为评估与试点的参考实现，而非可直接上线的生产运行时。
 
 ---
 
@@ -545,7 +547,7 @@ docker run -p 8080:8080 gaiaagent
 
 ## 路线图
 
-> GaiaAgent 当前为 **v0.1.0 alpha**：规范已冻结，参考实现交付了下述各层，但 API 仍在稳定中，生产化加固仍在推进。完整且持续更新的计划见 **[ROADMAP.zh.md](ROADMAP.zh.md)** —— 北极星、六条工作流、版本里程碑、验收标准与明确的非目标。
+> GaiaAgent 当前为 **v0.1.1 alpha**：规范已冻结，参考实现交付了下述各层，但 API 仍在稳定中，生产化加固仍在推进。完整且持续更新的计划见 **[ROADMAP.zh.md](ROADMAP.zh.md)** —— 北极星、六条工作流、版本里程碑、验收标准与明确的非目标。
 
 | 版本 | 主题 | 状态 |
 |:---:|:---|:---:|

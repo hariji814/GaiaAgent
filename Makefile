@@ -13,10 +13,10 @@ test-cov:
 	pytest --cov --cov-report=html
 
 lint:
-	ruff check src/ tests/
+	ruff check src/ tests/ main.py examples/ scripts/
 
 format:
-	ruff format src/ tests/
+	ruff format src/ tests/ main.py examples/ scripts/
 
 type-check:
 	mypy src/

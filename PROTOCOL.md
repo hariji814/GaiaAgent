@@ -5,7 +5,7 @@
 > 🌐 [中文版](PROTOCOL.zh.md)
 > **[← Back to README](README.md)** | [Architecture](docs/en/architecture.md) | [API Reference](docs/en/api-reference.md) | [Quick Start](docs/en/guides/quickstart.md)
 >
-> Status: Stable (v0.1 frozen)
+> Status: Stable (v0.1 frozen; backward compatibility guaranteed at v1.0)
 > Version: 0.1.0
 > License: CC BY-SA 4.0 (specification) / Apache-2.0 (implementation)
 

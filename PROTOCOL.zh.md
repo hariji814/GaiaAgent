@@ -5,7 +5,7 @@
 > 🌐 [English](PROTOCOL.md)
 > **[← 返回 README](README.zh.md)** | [架构](docs/zh/architecture.md) | [API 参考](docs/zh/api-reference.md) | [快速开始](docs/zh/guides/quickstart.md)
 >
-> 状态：草案
+> 状态：稳定（v0.1 冻结；向后兼容承诺于 v1.0）
 > 版本：0.1.0
 > 许可证：CC BY-SA 4.0（规范）/ Apache-2.0（实现）
 

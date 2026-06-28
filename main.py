@@ -73,7 +73,8 @@ async def main() -> None:
     orchestrator = OrchestratorAgent()
     researcher = ResearcherAgent()
     print(f"  OK Orchestrator: {orchestrator.aurc_descriptor.aurc_id}")
-    print(f"     Skills: {[s.skill_id for s in orchestrator.aurc_descriptor.capabilities.provides]}")
+    skills = [s.skill_id for s in orchestrator.aurc_descriptor.capabilities.provides]
+    print(f"     Skills: {skills}")
     print(f"  OK Researcher:   {researcher.aurc_descriptor.aurc_id}")
     print(f"     Skills: {[s.skill_id for s in researcher.aurc_descriptor.capabilities.provides]}")
 
@@ -82,16 +83,20 @@ async def main() -> None:
     # =========================================================================
     print("\n[Step] Step 2: Register in Harness & Registry / 注册到 Harness 和 Registry\n")
 
+    from gaiaagent.core.types import RecoveryAction, RecoveryPolicy, RecoveryStrategy
     from gaiaagent.harness.lifecycle import RuntimeHarness
     from gaiaagent.registry.local import LocalRegistry
-    from gaiaagent.core.types import RecoveryPolicy, RecoveryStrategy, RecoveryAction
 
     recovery = RecoveryPolicy(
         max_retries=3,
         backoff_ms=[100, 500, 2000],
         strategies=[
             RecoveryStrategy(trigger="timeout", action=RecoveryAction.RETRY_WITH_BACKOFF),
-            RecoveryStrategy(trigger="unrecoverable", action=RecoveryAction.ESCALATE, escalate_to="human"),
+            RecoveryStrategy(
+                trigger="unrecoverable",
+                action=RecoveryAction.ESCALATE,
+                escalate_to="human",
+            ),
         ],
     )
     harness = RuntimeHarness(recovery_policy=recovery)
@@ -110,18 +115,19 @@ async def main() -> None:
     # =========================================================================
     print("\n[Step] Step 3: Capability matching / 能力匹配\n")
 
-    from gaiaagent.core.capability import CapabilityMatcher
-
     matches = registry.find_by_skills(["deep-research", "summarize"])
     for match in matches:
         print(f"  [STAT] {match.agent.aurc_id}")
-        print(f"     Score: {match.score:.2f} | "
-              f"Matched: {[s.skill_id for s in match.matched_skills]} | "
-              f"Missing: {match.missing_skills}")
+        print(
+            f"     Score: {match.score:.2f} | "
+            f"Matched: {[s.skill_id for s in match.matched_skills]} | "
+            f"Missing: {match.missing_skills}"
+        )
 
     best = registry.find_best(["deep-research"])
     if best:
-        print(f"  [BEST] Best match for 'deep-research': {best.agent.aurc_id} (score={best.score:.2f})")
+        best_id = best.agent.aurc_id
+        print(f"  [BEST] Best match for 'deep-research': {best_id} (score={best.score:.2f})")
 
     # =========================================================================
     # 4. Message Routing / 消息路由
@@ -160,7 +166,7 @@ async def main() -> None:
         ),
     )
     result = await router.route(request)
-    print(f"  [Step] Request: orchestrator → researcher")
+    print("  [Step] Request: orchestrator → researcher")
     print(f"  [STAT] Result: {json.dumps(result, indent=2, default=str)[:200]}...")
     print(f"  [STAT] Router stats: {router.stats.to_dict()}")
 
@@ -169,9 +175,9 @@ async def main() -> None:
     # =========================================================================
     print("\n[Step] Step 5: Protocol bridges — MCP, A2A & ACP / 协议桥接\n")
 
-    from gaiaagent.bridges.base import MCPBridge, BridgeRegistry
     from gaiaagent.bridges.a2a import A2ABridge
     from gaiaagent.bridges.acp import ACPBridge
+    from gaiaagent.bridges.base import BridgeRegistry, MCPBridge
 
     bridge_registry = BridgeRegistry()
     mcp_bridge = MCPBridge()
@@ -189,15 +195,15 @@ async def main() -> None:
         "params": {"name": "web-search", "arguments": {"query": "AI protocols"}},
     }
     aurc_from_mcp = await mcp_bridge.translate_to_aurc(mcp_tool_call)
-    print(f"  [Step] MCP → AURC:")
-    print(f"     MCP method: tools/call")
+    print("  [Step] MCP → AURC:")
+    print("     MCP method: tools/call")
     print(f"     AURC type:  {aurc_from_mcp.type.value}")
     print(f"     AURC skill: {aurc_from_mcp.body.skill}")
     print(f"     Bridge chain: {aurc_from_mcp.protocol_context.bridge_chain}")
 
     # AURC → MCP / AURC 转 MCP
     mcp_from_aurc = await mcp_bridge.translate_from_aurc(aurc_from_mcp)
-    print(f"  [Step] AURC → MCP:")
+    print("  [Step] AURC → MCP:")
     print(f"     MCP output: {json.dumps(mcp_from_aurc, default=str)[:150]}")
 
     # A2A → AURC / A2A 转 AURC
@@ -208,12 +214,17 @@ async def main() -> None:
         "params": {
             "id": "task-001",
             "sessionId": "session-xyz",
-            "messages": [{"role": "user", "parts": [{"type": "text", "text": "Research quantum computing"}]}],
+            "messages": [
+                {
+                    "role": "user",
+                    "parts": [{"type": "text", "text": "Research quantum computing"}],
+                }
+            ],
         },
     }
     aurc_from_a2a = await a2a_bridge.translate_to_aurc(a2a_task)
-    print(f"  [Step] A2A → AURC:")
-    print(f"     A2A method:  tasks/send")
+    print("  [Step] A2A → AURC:")
+    print("     A2A method:  tasks/send")
     print(f"     AURC type:   {aurc_from_a2a.type.value}")
     print(f"     Bridge chain: {aurc_from_a2a.protocol_context.bridge_chain}")
 
@@ -229,15 +240,15 @@ async def main() -> None:
         "id": "acp-req-1",
     }
     aurc_from_acp = await acp_bridge.translate_to_aurc(acp_invoke)
-    print(f"  [Step] ACP → AURC:")
-    print(f"     ACP method:  invoke")
+    print("  [Step] ACP → AURC:")
+    print("     ACP method:  invoke")
     print(f"     AURC type:   {aurc_from_acp.type.value}")
     print(f"     AURC skill:  {aurc_from_acp.body.skill}")
     print(f"     Bridge chain: {aurc_from_acp.protocol_context.bridge_chain}")
 
     # AURC → ACP / AURC 转 ACP
     acp_from_aurc = await acp_bridge.translate_from_aurc(aurc_from_acp)
-    print(f"  [Step] AURC → ACP:")
+    print("  [Step] AURC → ACP:")
     print(f"     ACP output: {json.dumps(acp_from_aurc, default=str)[:150]}")
 
     print(f"  [STAT] Bridge registry: {bridge_registry.list_protocols()}")
@@ -270,13 +281,19 @@ async def main() -> None:
 
     from gaiaagent.security.auth import APIKeyAuthenticator, JWTAuthenticator
     from gaiaagent.security.authz import (
-        AuthorizationEngine, AgentPolicy, AuthorizationRule, Constraint,
+        AgentPolicy,
+        AuthorizationEngine,
+        AuthorizationRule,
+        Constraint,
     )
-    from gaiaagent.security.delegation import DelegationValidator, DelegationBuilder
+    from gaiaagent.security.delegation import DelegationBuilder, DelegationValidator
 
     # API Key auth / API Key 认证
     api_auth = APIKeyAuthenticator()
-    api_key = api_auth.create_key("aurc:demo/researcher:v1.0", scopes=["research:read", "research:write"])
+    api_key = api_auth.create_key(
+        "aurc:demo/researcher:v1.0",
+        scopes=["research:read", "research:write"],
+    )
     auth_result = api_auth.authenticate(api_key)
     print(f"  [KEY] API Key auth: {'OK' if auth_result.authenticated else 'X'}")
     print(f"     Agent: {auth_result.agent_id}")
@@ -290,24 +307,27 @@ async def main() -> None:
 
     # CapABAC authorization / CapABAC 授权
     engine = AuthorizationEngine()
-    engine.set_policy("aurc:demo/researcher:v1.0", AgentPolicy(
-        agent_id="aurc:demo/researcher:v1.0",
-        rules=[
-            AuthorizationRule(
-                resource_type="web-search",
-                actions=["execute"],
-                constraints=[
-                    Constraint("domain", "matches", r".*\.(edu|gov|org)$"),
-                ],
-                rate_limit=100,
-            ),
-            AuthorizationRule(
-                resource_type="database",
-                actions=["read"],
-                constraints=[],
-            ),
-        ],
-    ))
+    engine.set_policy(
+        "aurc:demo/researcher:v1.0",
+        AgentPolicy(
+            agent_id="aurc:demo/researcher:v1.0",
+            rules=[
+                AuthorizationRule(
+                    resource_type="web-search",
+                    actions=["execute"],
+                    constraints=[
+                        Constraint("domain", "matches", r".*\.(edu|gov|org)$"),
+                    ],
+                    rate_limit=100,
+                ),
+                AuthorizationRule(
+                    resource_type="database",
+                    actions=["read"],
+                    constraints=[],
+                ),
+            ],
+        ),
+    )
 
     authz_allowed = engine.authorize(
         agent_id="aurc:demo/researcher:v1.0",
@@ -321,19 +341,26 @@ async def main() -> None:
         action="execute",
         attributes={"domain": "suspicious.com"},
     )
-    print(f"  [AUTHZ] CapABAC (mit.edu):       {'OK ALLOWED' if authz_allowed.allowed else 'X DENIED'} — {authz_allowed.reason}")
-    print(f"  [AUTHZ] CapABAC (suspicious.com): {'OK ALLOWED' if authz_denied.allowed else 'X DENIED'} — {authz_denied.reason}")
+    mit_label = "OK ALLOWED" if authz_allowed.allowed else "X DENIED"
+    print(f"  [AUTHZ] CapABAC (mit.edu):       {mit_label} - {authz_allowed.reason}")
+    sus_label = "OK ALLOWED" if authz_denied.allowed else "X DENIED"
+    print(f"  [AUTHZ] CapABAC (suspicious.com): {sus_label} - {authz_denied.reason}")
 
     # Delegation chain / 委托链
     builder = DelegationBuilder()
-    builder.add_hop("aurc:user/alice:v1.0", "aurc:demo/orchestrator:v1.0",
-                    ["research:read", "web:search", "admin"])
-    builder.add_hop("aurc:demo/orchestrator:v1.0", "aurc:demo/researcher:v1.0",
-                    ["research:read", "web:search"])
+    builder.add_hop(
+        "aurc:user/alice:v1.0",
+        "aurc:demo/orchestrator:v1.0",
+        ["research:read", "web:search", "admin"],
+    )
+    builder.add_hop(
+        "aurc:demo/orchestrator:v1.0", "aurc:demo/researcher:v1.0", ["research:read", "web:search"]
+    )
     chain = builder.build()
 
     validator = DelegationValidator(max_depth=5)
     from gaiaagent.core.message import MessageSecurity
+
     security_ctx = MessageSecurity(
         scopes=["research:read", "web:search"],
         delegation_chain=chain,
@@ -348,22 +375,39 @@ async def main() -> None:
     # =========================================================================
     print("\n[Step] Step 8: Audit logging / 审计日志\n")
 
-    from gaiaagent.security.audit import AuditLog, AuditAction, AuditSeverity
+    from gaiaagent.security.audit import AuditAction, AuditLog, AuditSeverity
 
     audit = AuditLog(max_entries=1000)
     audit.log(AuditAction.AGENT_REGISTERED, agent_id="aurc:demo/orchestrator:v1.0")
     audit.log(AuditAction.AGENT_REGISTERED, agent_id="aurc:demo/researcher:v1.0")
-    audit.log(AuditAction.MESSAGE_ROUTED, agent_id="aurc:demo/orchestrator:v1.0",
-              target_id="aurc:demo/researcher:v1.0", protocol="aurc")
-    audit.log(AuditAction.MESSAGE_BRIDGED, agent_id="aurc:demo/researcher:v1.0",
-              protocol="mcp/2025-06-18", details={"bridge": "mcp→aurc"})
-    audit.log(AuditAction.AUTHZ_GRANTED, agent_id="aurc:demo/researcher:v1.0",
-              details={"resource": "web-search", "domain": "mit.edu"})
-    audit.log(AuditAction.AUTHZ_DENIED, agent_id="aurc:demo/researcher:v1.0",
-              severity=AuditSeverity.WARNING,
-              details={"resource": "web-search", "domain": "suspicious.com"})
-    audit.log(AuditAction.DELEGATION_VALIDATED, agent_id="aurc:demo/researcher:v1.0",
-              details={"chain_depth": 2, "valid": True})
+    audit.log(
+        AuditAction.MESSAGE_ROUTED,
+        agent_id="aurc:demo/orchestrator:v1.0",
+        target_id="aurc:demo/researcher:v1.0",
+        protocol="aurc",
+    )
+    audit.log(
+        AuditAction.MESSAGE_BRIDGED,
+        agent_id="aurc:demo/researcher:v1.0",
+        protocol="mcp/2025-06-18",
+        details={"bridge": "mcp→aurc"},
+    )
+    audit.log(
+        AuditAction.AUTHZ_GRANTED,
+        agent_id="aurc:demo/researcher:v1.0",
+        details={"resource": "web-search", "domain": "mit.edu"},
+    )
+    audit.log(
+        AuditAction.AUTHZ_DENIED,
+        agent_id="aurc:demo/researcher:v1.0",
+        severity=AuditSeverity.WARNING,
+        details={"resource": "web-search", "domain": "suspicious.com"},
+    )
+    audit.log(
+        AuditAction.DELEGATION_VALIDATED,
+        agent_id="aurc:demo/researcher:v1.0",
+        details={"chain_depth": 2, "valid": True},
+    )
 
     print(f"  [STAT] Audit entries: {audit.count}")
     print(f"  [STAT] Statistics: {audit.stats()}")
@@ -390,14 +434,15 @@ async def main() -> None:
     print(f"  OK Completed: {agent.state.value}")
 
     health = await harness.health_check("aurc:demo/researcher:v1.0")
-    print(f"  [HEALTH] Health: {health.status.value} | Tasks: completed={health.metrics.total_tasks_completed}")
+    completed = health.metrics.total_tasks_completed
+    print(f"  [HEALTH] Health: {health.status.value} | Tasks: completed={completed}")
 
     # =========================================================================
     # 10. Codec Demo / 编解码演示
     # =========================================================================
     print("\n[Step] Step 10: Message codec / 消息编解码\n")
 
-    from gaiaagent.bus.codec import JSONCodec, NDJSONCodec, MessageFrame
+    from gaiaagent.bus.codec import JSONCodec, MessageFrame, NDJSONCodec
 
     # JSON roundtrip / JSON 往返
     json_str = JSONCodec.encode(request, pretty=True)
@@ -412,7 +457,9 @@ async def main() -> None:
     # Message framing / 消息帧
     framed = MessageFrame.frame_message(request)
     unframed_msg, remaining = MessageFrame.unframe_message(framed)
-    print(f"  [Step] Framed: {len(framed)} bytes (header={MessageFrame.HEADER_SIZE} + payload={len(framed)-MessageFrame.HEADER_SIZE})")
+    header = MessageFrame.HEADER_SIZE
+    payload = len(framed) - header
+    print(f"  [Step] Framed: {len(framed)} bytes (header={header} + payload={payload})")
     print(f"  [Step] Unframed: source={unframed_msg.source}")
 
     # =========================================================================

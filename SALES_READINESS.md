@@ -13,11 +13,12 @@
 | 2 | Discord badge 指向 discord.gg/gaiaagent，域名无法验证 | 改为 Discord: planned badge | README 顶部 |
 | 3 | 版本号不一致：README 写 v0.1.0，pyproject 是 0.1.1 | README 统一为 v0.1.1 | README 状态行 + roadmap |
 | 4 | 推广措辞过度：Production-ready single-tenant（v0.2 表） | 改为 Production hardening (single-tenant target)，与 Alpha 自洽 | README roadmap 表 |
-| 5 | README 无诚实现状与限制声明，买家易误判成熟度 | 新增顶部 One-line status：509 passing、未上 PyPI、零采用、demo 用 stub LLM | README 中文链接下方 |
-| 6 | 核心卖点真跨进程 HTTP 轮次无回归保护 | 新增 tests/test_e2e_cross_process.py，子进程跑 demo 断言真路由 + 真网络轮次 + correlation 端到端 | pytest 509 passed |
-| 7 | 真实 MCP server + 真实 A2A 跨进程联调缺证据（见 C4） | 新增 examples/e2e_mcp_a2a_interop.py：spec-compliant A2A tasks/send 客户端 -> AURC /a2a -> 真实 MCP server（官方 mcp SDK FastMCP + ClientSession/stdio），算术在真实 MCP server 内完成、correlation 端到端；配套 examples/_real_mcp_server.py 与回归测试 | pytest 510 passed |
+| 5 | README 无诚实现状与限制声明，买家易误判成熟度 | 新增顶部 One-line status：522 passing、未上 PyPI、零采用、demo 用 stub LLM | README 中文链接下方 |
+| 6 | 核心卖点真跨进程 HTTP 轮次无回归保护 | 新增 tests/test_e2e_cross_process.py，子进程跑 demo 断言真路由 + 真网络轮次 + correlation 端到端 | pytest 522 passed |
+| 7 | 真实 MCP server + 真实 A2A 跨进程联调缺证据（见 C4） | 新增 examples/e2e_mcp_a2a_interop.py：spec-compliant A2A tasks/send 客户端 -> AURC /a2a -> 真实 MCP server（官方 mcp SDK FastMCP + ClientSession/stdio），算术在真实 MCP server 内完成、correlation 端到端；配套 examples/_real_mcp_server.py 与回归测试 | pytest 522 passed |
+| 8 | 规范状态中英自相矛盾：PROTOCOL.zh.md 标「草案」、PROTOCOL.md 标「Stable (v0.1 frozen)」；README.zh.md 版本仍 v0.1.0（英文已 v0.1.1）—— item 3 只改了英文，中文漏改 | PROTOCOL 中英状态统一为分层表述「稳定（v0.1 冻结；向后兼容承诺于 v1.0）」；README.zh.md 状态行 + roadmap 段同步为 v0.1.1 | grep：两版 PROTOCOL 均无「草案」、状态行语义一致；两版 README 均为 v0.1.1 |
 
-全量回归：pytest 510 passed / 2 skipped；ruff check 0 错；mypy --strict 0 错（57 源文件）。
+全量回归：pytest 522 passed / 2 skipped；ruff check 0 错；mypy --strict 0 错（57 源文件）。
 
 ---
 
@@ -35,7 +36,7 @@
 
 1. “乱码”已澄清：本地 PowerShell 用 GBK 代码页渲染 UTF-8 文件会显示乱码（如 鈕?/瑠?/路），但用 Python 以 UTF-8 读取 README.md/TODO.md 内容完好（零西里尔字符、零损坏）。文件本身未损坏，无需重写。仅需提醒：在 GBK 终端查看时以 Python 读或设置 chcp 65001 避免误判。此条不再是可信度硬伤。
 2. demo 用 stub LLM。demo.py 注释明示 No API key required - uses stub LLM responses。跨协议流是真的，AI 推理是假的。演示可接受但需口头说明，或补 --real-llm 开关走真 Anthropic API（代码已支持，缺示例）。
-3. ingress 无加固。HTTP/WS 无 body/连接数/速率上限。生产推销前必须补，否则 DoS 风险。
+3. ingress 加固已完成（2026-06-28，TODO P1-2）。HTTPTransportServer 引入 IngressLimits（默认 1 MiB body、1024 并发、30s 超时、100 req/s 全局令牌桶 burst 200）：uvicorn limit_concurrency、ASGI 顶门 429 rate_limited、_read_bounded() 413 payload_too_large、asyncio.wait_for 超时强制；WebSocketTransportServer/Client 加 max_frame_bytes（默认 10 MB）传入 websockets max_size，心跳保留；错误出口统一走 _send_error/_ws_error_envelope 结构化信封不泄 str(exc)。tests/test_ingress_limits.py 6 项覆盖。
 4. 桥接已补真实跨进程联调（MCP+A2A）。新增 examples/e2e_mcp_a2a_interop.py：spec-compliant A2A tasks/send 客户端经 HTTP 打到 AURC /a2a，AURC 翻译为 skill 调用，skill 用官方 mcp SDK（FastMCP server + ClientSession/stdio）调用真实 MCP server，算术在真实 MCP server 内完成、correlation 端到端；配套 examples/_real_mcp_server.py 与回归测试。A2A 客户端因 a2a-sdk 在本环境无法安装而手写，但完全符合 tasks/send JSON-RPC 2.0 线协议。ACP 侧仍无等价真网络联调，待补。
 
 ---

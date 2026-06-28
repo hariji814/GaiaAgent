@@ -24,7 +24,7 @@
 
 > 🌐 [中文版](README.zh.md)
 
-> **One-line status:** real, tested (510 passing), runs end-to-end over real HTTP (see `examples/e2e_cross_process.py`), but **alpha and single-implementation**. Not on PyPI yet (install via `pip install -e .`); zero production adopters; the bundled `demo` uses stub LLM responses (no API key) to show protocol flow, not real model inference. Treat it as a reference implementation to evaluate and pilot, not a drop-in production runtime.
+> **One-line status:** real, tested (522 passing), runs end-to-end over real HTTP (see `examples/e2e_cross_process.py`), but **alpha and single-implementation**. Not on PyPI yet (install via `pip install -e .`); zero production adopters; the bundled `demo` uses stub LLM responses (no API key) to show protocol flow, not real model inference. Treat it as a reference implementation to evaluate and pilot, not a drop-in production runtime.
 
 ---
 
@@ -587,7 +587,7 @@ docker run -p 8080:8080 gaiaagent
 | **v0.4** | Polyglot SDKs (TypeScript · Go · Rust) + conformance suite | 🔜 |
 | **v1.0** | Standard-grade: second independent implementation · spec frozen · security audit | 🔜 |
 
-**What "alpha" means here:** the modules exist, are unit-tested (510 passing), and run end-to-end over real HTTP — `python examples/e2e_cross_process.py` (A2A inbound + bridged round-trip) and `python examples/e2e_mcp_a2a_interop.py` (a request crossing MCP → AURC → A2A → AURC → MCP, correlation end-to-end) — but edge cases, perf, and the *second independent implementation* (the bar to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec, [ROADMAP.md](ROADMAP.md) for what's next.
+**What "alpha" means here:** the modules exist, are unit-tested (522 passing), and run end-to-end over real HTTP — `python examples/e2e_cross_process.py` (A2A inbound + bridged round-trip) and `python examples/e2e_mcp_a2a_interop.py` (a request crossing MCP → AURC → A2A → AURC → MCP, correlation end-to-end) — but edge cases, perf, and the *second independent implementation* (the bar to call AURC a true standard) are still ahead. See [PROTOCOL.md](PROTOCOL.md) for the frozen spec, [ROADMAP.md](ROADMAP.md) for what's next.
 
 > 📌 **Highest-leverage contribution:** build the second independent implementation of AURC — that single act graduates the protocol from "our spec" to "a standard."
 

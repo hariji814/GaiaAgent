@@ -36,3 +36,8 @@ uv.lock
 
 # Project specific
 *.log
+# Stray tool output / agent worktrees
+*.err
+*.tmp
+pout.txt
+.claude/worktrees/
