@@ -193,7 +193,7 @@ class MessageRouter:
                 raise
 
         # 2. Bridge routing / 桥接路由
-        if target.startswith(("mcp:", "a2a:", "acp:")):
+        if target.startswith(("mcp:", "a2a:", "acp:", "slack:", "telegram:", "discord:")):
             protocol_prefix = target.split(":")[0]
             forwarder = self._bridge_forwarders.get(protocol_prefix)
             if forwarder:

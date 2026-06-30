@@ -65,6 +65,7 @@ Work is organized into six tracks that move in parallel. Each item lists **what*
 | A2A Bridge (tasks/send ↔ AURC) | ✅ | Agent-to-agent delegation |
 | ACP Bridge (HTTP envelope ↔ AURC) | ✅ | Lightweight REST messaging |
 | Bidirectional context preservation (`correlation_id`, `bridge_chain`) | ✅ | Traceability across hops |
+| Messaging-channel bridges (Slack / Telegram / Discord) + channel e2e demo | ✅ | Chat surfaces as first-class AURC channels |
 | **gRPC Bridge** | 🔜 | High-performance internal meshes |
 | **GraphQL Bridge** | 💡 | Schema-first ecosystems |
 | **NATS / Kafka / AMQP bridges** | 💡 | Event-driven agent backbones |
@@ -133,7 +134,7 @@ A credibility-oriented snapshot of what already runs end-to-end today (`python m
 - ✅ `AURCId` URN identity + `AgentDescriptor` identity document
 - ✅ 9-state lifecycle engine with 6-strategy error recovery
 - ✅ Unified Message Bus: `MessageRouter` (direct/bridge/broadcast/dead-letter), `SessionManager`, JSON/NDJSON codecs
-- ✅ Bidirectional bridges for **MCP, A2A, ACP** with capability mapping
+- ✅ Bidirectional bridges for **MCP, A2A, ACP, Slack, Telegram, Discord** with capability mapping + channel senders
 - ✅ HTTP/2 + WebSocket transports
 - ✅ CapABAC: API Key/JWT auth, authorization engine, delegation-chain validation, append-only audit log
 - ✅ `LocalRegistry` with capability/tag/protocol matching
@@ -169,7 +170,7 @@ Stating what we will *not* build is as important as what we will. These are deli
 ### Good First Issues
 
 - A `map_capabilities` round-trip test for the ACP bridge
-- A `SlackBridge` reference implementation (see [Bridges Guide](docs/en/guides/bridges.md))
+- ✅ A `SlackBridge` + `TelegramBridge` + `DiscordBridge` reference implementation (see [Bridges Guide](docs/en/guides/bridges.md))
 - An OpenTelemetry exporter layered on `BridgeTraceRecorder` (Track 4)
 - A TypeScript client for the AURC HTTP transport
 

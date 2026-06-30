@@ -13,9 +13,10 @@
 2. [MCP Bridge](#mcp-bridge)
 3. [A2A Bridge](#a2a-bridge)
 4. [ACP Bridge](#acp-bridge)
-5. [Building Custom Bridges](#building-custom-bridges)
-6. [Cross-Protocol Routing](#cross-protocol-routing)
-7. [Bridge Testing and Debugging](#bridge-testing-and-debugging)
+5. [Messaging Channel Bridges](#messaging-channel-bridges-slack--telegram)
+6. [Building Custom Bridges](#building-custom-bridges)
+7. [Cross-Protocol Routing](#cross-protocol-routing)
+8. [Bridge Testing and Debugging](#bridge-testing-and-debugging)
 
 ---
 
@@ -384,6 +385,129 @@ aurc_descriptor = acp_bridge.map_agent_card(acp_descriptor)
 ```
 
 > **Note:** The template below remains useful as a reference for bridges whose semantics differ from ACP's. For ACP itself, prefer the built-in `ACPBridge`.
+
+---
+
+## Messaging Channel Bridges (Slack / Telegram)
+
+The MCP / A2A / ACP bridges target *agent* protocols. GaiaAgent also ships
+bridges for *messaging channels* -- chat surfaces where real users live -- so a
+Slack workspace, a Telegram chat, or a Discord server can act as a first-class
+AURC channel. This extends the "bridges, not walls" thesis to a protocol family
+beyond agent RPC.
+
+Each channel bridge comes in two halves, matching the MCP/A2A/ACP split:
+
+- a **translator** (`SlackBridge` / `TelegramBridge` / `DiscordBridge`) that
+  converts an external event to/from an `AURCMessage`, with no network dependency;
+- a **sender** (`SlackSender` / `TelegramSender` / `DiscordSender`) that wraps
+  the translator and adds connectivity -- it POSTs the translated payload and
+  builds an AURC `response` from the reply.
+
+### Slack Bridge
+
+`SlackBridge` (`gaiaagent.bridges.slack`) translates between Slack's Events API
+/ Web API and AURC. Inbound: `message` / `app_mention` -> AURC `notification`
+(`event="channel.message"`); `slash_command` and `interactive` payloads -> AURC
+`request` (`method="invoke"`); `url_verification` -> `url_verify`. Outbound:
+AURC `notification` / `response` -> `chat.postMessage`; `stream` ->
+`chat.update`. Slack `thread_ts` (or message `ts`) is carried as the AURC
+`correlation_id`, so a whole thread maps to one trace.
+
+```python
+from gaiaagent.bridges import SlackBridge, SlackSender
+from gaiaagent.bus.router import MessageRouter
+
+bridge = SlackBridge()
+sender = SlackSender(token="xoxb-...")  # pass client_factory= for tests
+
+router = MessageRouter()
+router.register_bridge_forwarder("slack", sender.forward)
+
+# An inbound Slack event -> AURC; an AURC reply to slack:C123 -> chat.postMessage
+```
+
+`SlackSender` POSTs to `https://slack.com/api/<method>` with a Bearer token and
+returns a `response` carrying the Slack result, or an `ErrorInfo`
+(`slack_error` for `ok=false`, `transport_error` for network/HTTP failures).
+
+### Telegram Bridge
+
+`TelegramBridge` (`gaiaagent.bridges.telegram`) translates between the Telegram
+Bot API and AURC. Inbound: a `message` with text -> AURC `notification`
+(`event="channel.message"`), or an AURC `request` (`method="invoke"`) when the
+text is a `/command`; `callback_query` (inline button) -> `request`;
+`edited_message` -> `channel.message_edited`. Outbound: `notification` /
+`response` -> `sendMessage`; `stream` -> `editMessageText` (in-place refresh),
+all rendered with `parse_mode=Markdown`. Group `@bot` mentions and the
+`/cmd@bot` suffix are stripped; `reply_to_message.message_id` (or the message
+id) is the AURC `correlation_id`.
+
+```python
+from gaiaagent.bridges import TelegramBridge, TelegramSender
+from gaiaagent.bus.router import MessageRouter
+
+bridge = TelegramBridge(bot_username="mybot")  # strips @mybot in groups
+sender = TelegramSender(token="123456:ABC-DEF")
+
+router = MessageRouter()
+router.register_bridge_forwarder("telegram", sender.forward)
+```
+
+`TelegramSender` POSTs to `https://api.telegram.org/bot<token>/<method>` (the
+token rides in the URL path, per the Bot API) and maps `{"ok": true, "result":
+...}` to an AURC `response`; `ok=false` becomes a `telegram_error`.
+
+### Discord Bridge
+
+`DiscordBridge` (`gaiaagent.bridges.discord`) translates between the Discord
+Gateway / Bot API and AURC. Inbound: a gateway `MESSAGE_CREATE` becomes an AURC
+`notification` (`event="channel.message"`) -- a DM when `guild_id` is absent, a
+server `@mention` otherwise (the `<@id>` / `<@!id>` mention is stripped);
+`MESSAGE_UPDATE` -> `channel.message_edited`; an `INTERACTION_CREATE` (slash
+command) -> AURC `request` (`method="invoke"`), with `data.name` +
+`data.options` carried as the skill and params. Outbound: `notification` /
+`response` -> `createMessage`; `stream` -> `editMessage` (in-place refresh).
+Reply correlation uses `message_reference.message_id` (or the message `id`) as
+the AURC `correlation_id`, so a reply thread maps to one trace. The gateway
+envelope `{"t": "...", "d": {...}}` is unwrapped; a bare dict is auto-detected
+by shape.
+
+```python
+from gaiaagent.bridges import DiscordBridge, DiscordSender
+from gaiaagent.bus.router import MessageRouter
+
+bridge = DiscordBridge()
+sender = DiscordSender(token="<bot token>")  # pass client_factory= for tests
+
+router = MessageRouter()
+router.register_bridge_forwarder("discord", sender.forward)
+```
+
+`DiscordSender` POSTs to `https://discord.com/api/v10/channels/<id>/messages`
+with an `Authorization: Bot <token>` header and maps the reply to an AURC
+`response`; a missing `id` becomes a `discord_error`, network/HTTP failures
+become a `transport_error`. `editMessage` is a PATCH to the same path with the
+message id appended.
+
+### Channel Conformance
+
+All three channel bridges satisfy the `ProtocolBridge` contract, so they register
+with `BridgeRegistry` and stamp `bridge_chain` (`slack->aurc` / `telegram->aurc`
+/ `discord->aurc`) exactly like the MCP/A2A/ACP bridges. Targets use the
+`slack:` / `telegram:` / `discord:` prefixes, which `MessageRouter` routes to the
+registered sender. Each ships a full round-trip test suite
+(`tests/test_slack_bridge.py`, `tests/test_telegram_bridge.py`,
+`tests/test_discord_bridge.py`) covering the contract, conformance invariants
+(correlation propagation, idempotent inbound, bridge-chain stamping), outbound
+rendering, and the sender translate -> POST -> build-response loop with an
+injected fake client.
+See `examples/e2e_channel_interop.py` for a runnable end-to-end demo: a
+Slack mention, a Telegram `/command`, and a Discord DM all reach a real
+`@aurc_agent` skill and are answered back in-channel, with correlation carried
+across all three channel boundaries (no network; a fake client stands in for
+the wire).
+
 
 ---
 
